@@ -132,7 +132,7 @@ export default function App() {
             }]
           }]}>
             <GradientText style={styles.title}>CAPTURE</GradientText>
-            <GradientText style={[styles.title, { color: '#ff5252' }]}>THE</GradientText>
+            <GradientText style={[styles.title, { color: 'hsla(284, 93%, 76%, 1.00)' }]}>THE</GradientText>
             <GradientText style={styles.title}>HAZARDS</GradientText>
           </Animated.View>
 

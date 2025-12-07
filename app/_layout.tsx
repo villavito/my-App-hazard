@@ -1,50 +1,42 @@
-import { useFonts } from 'expo-font';
+import { LinearGradient } from 'expo-linear-gradient';
 import { Stack } from 'expo-router';
-import * as SplashScreen from 'expo-splash-screen';
 import { StatusBar } from 'expo-status-bar';
-import { useEffect } from 'react';
+import { StyleSheet, View } from 'react-native';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 
-// Keep the splash screen visible while we fetch resources
-SplashScreen.preventAutoHideAsync();
-
 export default function RootLayout() {
-  const [fontsLoaded] = useFonts({
-    // You can add custom fonts here if needed
-    // Example:
-    // 'Inter-Bold': require('../assets/fonts/Inter-Bold.ttf'),
-  });
-
-  useEffect(() => {
-    if (fontsLoaded) {
-      // Hide the splash screen after the fonts have loaded and the UI is ready
-      SplashScreen.hideAsync();
-    }
-  }, [fontsLoaded]);
-
-  if (!fontsLoaded) {
-    return null; // Or a loading screen
-  }
 
   return (
     <SafeAreaProvider>
       <StatusBar style="light" />
-      <Stack
-        screenOptions={{
-          headerShown: false,
-          contentStyle: { backgroundColor: '#1a0a2e' },
-          animation: 'fade',
-        }}
+      <LinearGradient
+        colors={['#000000', '#092e6d', '#403673', '#ffffff']}
+        style={styles.background}
+        start={{ x: 0, y: 0 }}
+        end={{ x: 1, y: 1 }}
       >
-        <Stack.Screen 
-          name="index" 
-          options={{
-            animation: 'fade',
-            animationDuration: 300,
-          }}
-        />
-        {/* Add more screens here as your app grows */}
-      </Stack>
+        <View style={styles.overlay}>
+          <Stack
+            screenOptions={{
+              headerShown: false,
+              contentStyle: { backgroundColor: 'transparent' },
+              animation: 'fade',
+              gestureEnabled: true,
+            }}
+          >
+        <Stack.Screen name="index" />
+          </Stack>
+        </View>
+      </LinearGradient>
     </SafeAreaProvider>
   );
 }
+
+const styles = StyleSheet.create({
+  background: {
+    ...StyleSheet.absoluteFillObject,
+  },
+  overlay: {
+    flex: 1,
+  },
+});
