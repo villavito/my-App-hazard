@@ -1,6 +1,7 @@
-import { useRouter } from 'expo-router';
-import { useEffect, useRef } from 'react';
+import { LinearGradient } from 'expo-linear-gradient';
+import { useEffect, useRef, useState } from 'react';
 import { Animated, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import SwipeableScreen from '../components/SwipeableScreen';
 
 interface GradientTextProps {
   children: React.ReactNode;
@@ -21,71 +22,206 @@ const GradientText = ({ children, style }: GradientTextProps) => {
   );
 };
 
-export default function WelcomeScreen() {
-  const fadeAnim = useRef(new Animated.Value(0)).current;
-  const router = useRouter();
+export default function App() {
+  const [showHome, setShowHome] = useState(false);
+  
+  // Create animated values for each element
+  const titleAnim = useRef(new Animated.Value(0)).current;
+  const text1Anim = useRef(new Animated.Value(0)).current;
+  const text2Anim = useRef(new Animated.Value(0)).current;
+  const iconsAnim = useRef(new Animated.Value(0)).current;
+  const buttonAnim = useRef(new Animated.Value(0)).current;
+  const loginAnim = useRef(new Animated.Value(0)).current;
 
+  // Animation sequence
   useEffect(() => {
-    Animated.timing(fadeAnim, {
-      toValue: 1,
-      duration: 1000,
-      useNativeDriver: true,
-    }).start();
-  }, [fadeAnim]);
+    const animations = [
+      Animated.sequence([
+        Animated.delay(300),
+        Animated.timing(titleAnim, {
+          toValue: 1,
+          duration: 800,
+          useNativeDriver: true,
+        })
+      ]),
+      Animated.sequence([
+        Animated.delay(600),
+        Animated.timing(text1Anim, {
+          toValue: 1,
+          duration: 800,
+          useNativeDriver: true,
+        })
+      ]),
+      Animated.sequence([
+        Animated.delay(700),
+        Animated.timing(text2Anim, {
+          toValue: 1,
+          duration: 800,
+          useNativeDriver: true,
+        })
+      ]),
+      Animated.sequence([
+        Animated.delay(1000),
+        Animated.spring(iconsAnim, {
+          toValue: 1,
+          friction: 4,
+          useNativeDriver: true,
+        })
+      ]),
+      Animated.sequence([
+        Animated.delay(1300),
+        Animated.spring(buttonAnim, {
+          toValue: 1,
+          friction: 5,
+          useNativeDriver: true,
+        })
+      ]),
+      Animated.sequence([
+        Animated.delay(1600),
+        Animated.timing(loginAnim, {
+          toValue: 1,
+          duration: 600,
+          useNativeDriver: true,
+        })
+      ])
+    ];
+
+    Animated.stagger(100, animations).start();
+  }, []);
 
   const handleGetStarted = () => {
-    router.push('/home');
+    setShowHome(true);
   };
+
+  const handleGoBack = () => {
+    setShowHome(false);
+  };
+
+  if (showHome) {
+    return (
+      <SwipeableScreen onSwipeRight={handleGoBack}>
+        <View style={styles.homeContent}>
+          <Text style={styles.homeTitle}>Welcome to Hazard App</Text>
+          <Text style={styles.homeSubtitle}>Swipe right to go back</Text>
+        </View>
+      </SwipeableScreen>
+    );
+  }
   return (
-    <View style={styles.container}>
-      <View style={styles.card}>
-        {/* Warning Icon */}
-        <View style={styles.iconContainer}>
-          <Text style={styles.icon}>⚠️</Text>
-        </View>
-
-        {/* Title */}
-        <Animated.View style={[styles.titleContainer, { opacity: fadeAnim }]}>
-          <GradientText style={styles.title}>CAPTURE</GradientText>
-          <GradientText style={[styles.title, { color: '#ff5252' }]}>THE</GradientText>
-          <GradientText style={styles.title}>HAZARDS</GradientText>
-        </Animated.View>
-
-        {/* Paragraphs */}
-        <Text style={[styles.paragraph, { fontSize: 13 }]}>Stay Alert. Stay Safe</Text>
-        <Text style={[styles.paragraph, { fontSize: 9, marginTop: -20 }]}>identify hazards around you</Text>
-        
-        {/* Hazard Icons */}
-        <View style={styles.iconsRow}>
-          <Text style={styles.hazardIcon}>🔥</Text>
-          <Text style={styles.hazardIcon}>🌊</Text>
-          <Text style={styles.hazardIcon}>⚡</Text>
-          <Text style={styles.hazardIcon}>☢️</Text>
-        </View>
-
-        <View style={styles.buttonContainer}>
-          <TouchableOpacity 
-            style={styles.button}
-            onPress={handleGetStarted}
-          >
-            <Text style={styles.buttonText}>Get Started</Text>
-          </TouchableOpacity>
-          <View style={styles.loginContainer}>
-            <Text style={styles.loginText}>
-              Already have an account?{' '}
-              <Text style={styles.loginLink}>Login</Text>
-            </Text>
+    <LinearGradient
+      colors={['#000000', '#092e6dff', '#403673ff', '#ffffff']}
+      style={styles.gradient}
+      start={{ x: 0.5, y: 0 }}
+      end={{ x: 0.5, y: 1 }}
+    >
+      <View style={styles.container}>
+        <View style={styles.card}>
+          {/* Warning Icon */}
+          <View style={styles.iconContainer}>
+            <Text style={styles.icon}>⚠️</Text>
           </View>
+
+          {/* Title */}
+          <Animated.View style={[styles.titleContainer, {
+            opacity: titleAnim,
+            transform: [{
+              translateY: titleAnim.interpolate({
+                inputRange: [0, 1],
+                outputRange: [20, 0]
+              })
+            }]
+          }]}>
+            <GradientText style={styles.title}>CAPTURE</GradientText>
+            <GradientText style={[styles.title, { color: '#ff5252' }]}>THE</GradientText>
+            <GradientText style={styles.title}>HAZARDS</GradientText>
+          </Animated.View>
+
+          {/* Paragraphs */}
+          <Animated.Text style={[styles.paragraph, { 
+            fontSize: 13,
+            opacity: text1Anim,
+            transform: [{
+              translateX: text1Anim.interpolate({
+                inputRange: [0, 1],
+                outputRange: [-50, 0]
+              })
+            }]
+          }]}>Stay Alert. Stay Safe</Animated.Text>
+          
+          <Animated.Text style={[styles.paragraph, { 
+            fontSize: 9, 
+            marginTop: -20,
+            opacity: text2Anim,
+            transform: [{
+              translateX: text2Anim.interpolate({
+                inputRange: [0, 1],
+                outputRange: [50, 0]
+              })
+            }]
+          }]}>identify hazards around you</Animated.Text>
+          
+          {/* Hazard Icons */}
+          <Animated.View style={[styles.iconsRow, {
+            opacity: iconsAnim,
+            transform: [{
+              scale: iconsAnim.interpolate({
+                inputRange: [0, 1],
+                outputRange: [0.5, 1]
+              })
+            }]
+          }]}>
+            <Text style={styles.hazardIcon}>🔥</Text>
+            <Text style={styles.hazardIcon}>🌊</Text>
+            <Text style={styles.hazardIcon}>⚡</Text>
+            <Text style={styles.hazardIcon}>☢️</Text>
+          </Animated.View>
+
+          <Animated.View style={[styles.buttonContainer, {
+            opacity: buttonAnim,
+            transform: [{
+              translateY: buttonAnim.interpolate({
+                inputRange: [0, 1],
+                outputRange: [50, 0]
+              })
+            }]
+          }]}>
+            <TouchableOpacity 
+              style={[styles.button, {
+                opacity: buttonAnim,
+                transform: [{
+                  scale: buttonAnim.interpolate({
+                    inputRange: [0, 0.5, 1],
+                    outputRange: [0.8, 1.1, 1]
+                  })
+                }]
+              }]}
+              onPress={handleGetStarted}
+            >
+              <Text style={styles.buttonText}>Get Started</Text>
+            </TouchableOpacity>
+            
+            <Animated.View style={[styles.loginContainer, {
+              opacity: loginAnim,
+            }]}>
+              <Text style={styles.loginText}>
+                Already have an account?{' '}
+                <Text style={styles.loginLink}>Login</Text>
+              </Text>
+            </Animated.View>
+          </Animated.View>
         </View>
       </View>
-    </View>
+    </LinearGradient>
   );
 }
 
 const styles = StyleSheet.create({
+  gradient: {
+    flex: 1,
+  },
   container: {
     flex: 1,
-    backgroundColor: '#1a0a2e',
+    backgroundColor: 'transparent',
     padding: 16,
     justifyContent: 'center',
     alignItems: 'center',
@@ -175,5 +311,22 @@ const styles = StyleSheet.create({
     width: '100%',
     alignItems: 'center',
     marginTop: 30,
+  },
+  // Home screen content
+  homeContent: {
+    flex: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+    padding: 20,
+  },
+  homeTitle: {
+    fontSize: 24,
+    fontWeight: 'bold',
+    color: '#fff',
+    marginBottom: 16,
+  },
+  homeSubtitle: {
+    fontSize: 16,
+    color: 'rgba(255, 255, 255, 0.7)',
   },
 });

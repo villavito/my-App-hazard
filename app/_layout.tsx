@@ -1,30 +1,50 @@
-import { DarkTheme, DefaultTheme, ThemeProvider } from '@react-navigation/native';
+import { useFonts } from 'expo-font';
 import { Stack } from 'expo-router';
-import { useColorScheme } from 'react-native';
+import * as SplashScreen from 'expo-splash-screen';
+import { StatusBar } from 'expo-status-bar';
+import { useEffect } from 'react';
+import { SafeAreaProvider } from 'react-native-safe-area-context';
+
+// Keep the splash screen visible while we fetch resources
+SplashScreen.preventAutoHideAsync();
 
 export default function RootLayout() {
-  const colorScheme = useColorScheme();
+  const [fontsLoaded] = useFonts({
+    // You can add custom fonts here if needed
+    // Example:
+    // 'Inter-Bold': require('../assets/fonts/Inter-Bold.ttf'),
+  });
+
+  useEffect(() => {
+    if (fontsLoaded) {
+      // Hide the splash screen after the fonts have loaded and the UI is ready
+      SplashScreen.hideAsync();
+    }
+  }, [fontsLoaded]);
+
+  if (!fontsLoaded) {
+    return null; // Or a loading screen
+  }
 
   return (
-    <ThemeProvider value={colorScheme === 'dark' ? DarkTheme : DefaultTheme}>
-      <Stack>
+    <SafeAreaProvider>
+      <StatusBar style="light" />
+      <Stack
+        screenOptions={{
+          headerShown: false,
+          contentStyle: { backgroundColor: '#1a0a2e' },
+          animation: 'fade',
+        }}
+      >
         <Stack.Screen 
           name="index" 
-          options={{ 
-            headerShown: false 
-          }} 
+          options={{
+            animation: 'fade',
+            animationDuration: 300,
+          }}
         />
-        <Stack.Screen 
-          name="home/index" 
-          options={{ 
-            title: 'Home',
-            headerStyle: {
-              backgroundColor: '#1a0a2e',
-            },
-            headerTintColor: '#fff',
-          }} 
-        />
+        {/* Add more screens here as your app grows */}
       </Stack>
-    </ThemeProvider>
+    </SafeAreaProvider>
   );
 }
