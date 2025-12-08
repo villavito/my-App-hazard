@@ -1,7 +1,7 @@
 import { LinearGradient } from 'expo-linear-gradient';
+import { router } from 'expo-router';
 import { useEffect, useRef, useState } from 'react';
 import { Animated, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
-import SwipeableScreen from '../components/SwipeableScreen';
 
 interface GradientTextProps {
   children: React.ReactNode;
@@ -89,24 +89,10 @@ export default function App() {
     Animated.stagger(100, animations).start();
   }, []);
 
+  
   const handleGetStarted = () => {
-    setShowHome(true);
+    router.push('/landing');
   };
-
-  const handleGoBack = () => {
-    setShowHome(false);
-  };
-
-  if (showHome) {
-    return (
-      <SwipeableScreen onSwipeRight={handleGoBack}>
-        <View style={styles.homeContent}>
-          <Text style={styles.homeTitle}>Welcome to Hazard App</Text>
-          <Text style={styles.homeSubtitle}>Swipe right to go back</Text>
-        </View>
-      </SwipeableScreen>
-    );
-  }
   return (
     <LinearGradient
       colors={['#000000', '#092e6dff', '#403673ff', '#ffffff']}
@@ -185,6 +171,7 @@ export default function App() {
               })
             }]
           }]}>
+                        
             <TouchableOpacity 
               style={[styles.button, {
                 opacity: buttonAnim,
@@ -322,7 +309,6 @@ const styles = StyleSheet.create({
   homeTitle: {
     fontSize: 24,
     fontWeight: 'bold',
-    color: '#fff',
     marginBottom: 16,
   },
   homeSubtitle: {
