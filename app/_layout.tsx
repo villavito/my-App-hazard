@@ -24,8 +24,8 @@ export default function RootLayout() {
               gestureEnabled: true,
             }}
           >
-        <Stack.Screen name="index" />
-        <Stack.Screen name="landing" />
+            <Stack.Screen name="index" />
+            <Stack.Screen name="welcome" />
           </Stack>
         </View>
       </LinearGradient>

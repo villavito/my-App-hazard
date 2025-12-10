@@ -91,7 +91,7 @@ export default function App() {
 
   
   const handleGetStarted = () => {
-    router.push('/landing');
+    router.push('/welcome');
   };
   return (
     <LinearGradient
@@ -190,10 +190,12 @@ export default function App() {
             <Animated.View style={[styles.loginContainer, {
               opacity: loginAnim,
             }]}>
-              <Text style={styles.loginText}>
-                Already have an account?{' '}
-                <Text style={styles.loginLink}>Login</Text>
-              </Text>
+              <TouchableOpacity onPress={() => router.push('/(auth)/login')}>
+                <Text style={styles.loginText}>
+                  Already have an account?{' '}
+                  <Text style={styles.loginLink}>Login</Text>
+                </Text>
+              </TouchableOpacity>
             </Animated.View>
           </Animated.View>
         </View>

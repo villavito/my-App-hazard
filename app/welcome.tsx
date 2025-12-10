@@ -1,8 +1,8 @@
 import { router } from 'expo-router';
 import { useEffect, useRef } from 'react';
-import { Animated, PanResponder, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import { Animated, PanResponder, StyleSheet, Text, TouchableOpacity } from 'react-native';
 
-export default function LandingScreen() {
+export default function WelcomeScreen() {
   const splashAnim = useRef(new Animated.Value(0)).current;
   const contentAnim = useRef(new Animated.Value(0)).current;
 
@@ -78,21 +78,19 @@ export default function LandingScreen() {
         <Text style={styles.title}>Welcome to Your Landing Page</Text>
         <Text style={styles.subtitle}>This is where users land after clicking Get Started</Text>
         
-        <View style={styles.buttonContainer}>
-          <TouchableOpacity 
-            style={styles.primaryButton}
-            onPress={() => router.push('/(auth)/login')}
-          >
-            <Text style={styles.primaryButtonText}>Login</Text>
-          </TouchableOpacity>
-          
-          <TouchableOpacity 
-            style={styles.secondaryButton}
-            onPress={() => router.push('/signup')}
-          >
-            <Text style={styles.secondaryButtonText}>Sign Up</Text>
-          </TouchableOpacity>
-        </View>
+        <TouchableOpacity 
+          style={styles.loginButton}
+          onPress={() => router.push('/(auth)/login')}
+        >
+          <Text style={styles.loginButtonText}>Login</Text>
+        </TouchableOpacity>
+        
+        <TouchableOpacity 
+          style={styles.signupButton}
+          onPress={() => router.push('/signup')}
+        >
+          <Text style={styles.signupButtonText}>Sign Up</Text>
+        </TouchableOpacity>
       </Animated.View>
     </Animated.View>
   );
@@ -109,10 +107,10 @@ const styles = StyleSheet.create({
   },
   title: {
     fontSize: 32,
-    fontWeight: 'bold',
+    fontWeight: 'bold' as const,
     color: '#fff',
     marginBottom: 50,
-    textAlign: 'center',
+    textAlign: 'center' as const,
     textShadowColor: 'rgba(0,0,0,0.3)',
     textShadowOffset: { width: 1, height: 1 },
     textShadowRadius: 2,
@@ -123,42 +121,6 @@ const styles = StyleSheet.create({
     textAlign: 'center',
     marginBottom: 40,
     lineHeight: 24,
-  },
-  buttonContainer: {
-    width: '100%',
-    alignItems: 'center',
-    gap: 15,
-  },
-  primaryButton: {
-    backgroundColor: '#2563eb',
-    paddingHorizontal: 40,
-    paddingVertical: 15,
-    borderRadius: 25,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.25,
-    shadowRadius: 4,
-    elevation: 5,
-  },
-  primaryButtonText: {
-    color: '#fff',
-    fontSize: 18,
-    fontWeight: 'bold',
-    textAlign: 'center',
-  },
-  secondaryButton: {
-    backgroundColor: 'transparent',
-    paddingHorizontal: 40,
-    paddingVertical: 15,
-    borderRadius: 25,
-    borderWidth: 2,
-    borderColor: '#2563eb',
-  },
-  secondaryButtonText: {
-    color: '#2563eb',
-    fontSize: 18,
-    fontWeight: 'bold',
-    textAlign: 'center',
   },
   backButton: {
     fontSize: 16,
@@ -188,5 +150,38 @@ const styles = StyleSheet.create({
     shadowOpacity: 0.8,
     shadowRadius: 20,
     elevation: 10,
+  },
+  loginButton: {
+    backgroundColor: '#2563eb',
+    paddingHorizontal: 40,
+    paddingVertical: 15,
+    borderRadius: 25,
+    marginTop: 30,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.25,
+    shadowRadius: 4,
+    elevation: 5,
+  },
+  loginButtonText: {
+    color: '#fff',
+    fontSize: 18,
+    fontWeight: 'bold',
+    textAlign: 'center',
+  },
+  signupButton: {
+    backgroundColor: 'transparent',
+    paddingHorizontal: 40,
+    paddingVertical: 15,
+    borderRadius: 25,
+    marginTop: 15,
+    borderWidth: 2,
+    borderColor: '#2563eb',
+  },
+  signupButtonText: {
+    color: '#2563eb',
+    fontSize: 18,
+    fontWeight: 'bold',
+    textAlign: 'center',
   },
 });
