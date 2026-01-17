@@ -3,17 +3,14 @@ import { useRouter } from 'expo-router';
 import { useState } from 'react';
 import { Alert, StyleSheet, Text, TextInput, TouchableOpacity, useColorScheme, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { createUserWithRole } from '../services/authService';
+import { signInUser } from '../services/authService';
 
-export default function SignupScreen() {
+export default function LoginScreen() {
   const colorScheme = useColorScheme();
   const isDark = colorScheme === 'dark';
-  const [name, setName] = useState('');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
-  const [confirmPassword, setConfirmPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
-  const [showConfirmPassword, setShowConfirmPassword] = useState(false);
   const [loading, setLoading] = useState(false);
   const router = useRouter();
 
@@ -72,24 +69,19 @@ export default function SignupScreen() {
       fontSize: 18,
       fontWeight: '600',
     },
-    loginContainer: {
+    signupContainer: {
       flexDirection: 'row',
       justifyContent: 'center',
       marginTop: 20,
     },
-    loginText: {
+    signupText: {
       color: isDark ? '#888' : '#666',
       fontSize: 14,
     },
-    loginLink: {
+    signupLink: {
       color: '#007AFF',
       fontSize: 14,
       fontWeight: '600',
-    },
-    errorText: {
-      color: '#FF3B30',
-      fontSize: 14,
-      marginTop: 4,
     },
     passwordContainer: {
       flexDirection: 'row',
@@ -109,40 +101,42 @@ export default function SignupScreen() {
       padding: 16,
       color: isDark ? '#888' : '#666',
     },
+    forgotPasswordLink: {
+      alignSelf: 'flex-end',
+      marginTop: 8,
+    },
+    forgotPasswordText: {
+      color: '#007AFF',
+      fontSize: 14,
+      fontWeight: '600',
+    },
   });
 
-  const handleSignup = async () => {
-    // Basic validation
-    if (!name || !email || !password || !confirmPassword) {
+  const handleLogin = async () => {
+    if (!email || !password) {
       Alert.alert('Error', 'Please fill in all fields');
-      return;
-    }
-
-    if (password !== confirmPassword) {
-      Alert.alert('Error', 'Passwords do not match');
-      return;
-    }
-
-    if (password.length < 6) {
-      Alert.alert('Error', 'Password must be at least 6 characters');
       return;
     }
 
     setLoading(true);
     try {
-      console.log('Attempting to create user with:', { email, name, role: 'user' });
-      const result = await createUserWithRole(email, password, name, 'user');
-      console.log('Signup result:', result);
+      const result = await signInUser(email, password);
       
-      if (result.success) {
-        Alert.alert('Success', 'Account created successfully! Please sign in.');
-        router.push('/login');
+      if (result.success && result.user) {
+        Alert.alert('Success', `Welcome back! You are logged in as ${result.user.role}`);
+        // Navigate based on user role
+        if (result.user.role === 'super_admin') {
+          router.push('/admin/super-admin');
+        } else if (result.user.role === 'admin') {
+          router.push('/admin/dashboard');
+        } else {
+          router.push('/dashboard');
+        }
       } else {
-        Alert.alert('Signup Error', result.error);
+        Alert.alert('Login Error', result.error || 'Login failed');
       }
     } catch (error: any) {
-      console.error('Signup component error:', error);
-      Alert.alert('Signup Error', error.message);
+      Alert.alert('Login Error', error.message);
     } finally {
       setLoading(false);
     }
@@ -152,22 +146,10 @@ export default function SignupScreen() {
     <SafeAreaView style={styles.container}>
       <View style={styles.header}>
         <Text style={styles.logo}>Hazard</Text>
-        <Text style={styles.subtitle}>Create your account</Text>
+        <Text style={styles.subtitle}>Sign in to continue</Text>
       </View>
 
       <View style={styles.form}>
-        <View style={styles.inputGroup}>
-          <Text style={styles.label}>Full Name</Text>
-          <TextInput
-            style={styles.input}
-            placeholder="Enter your full name"
-            placeholderTextColor={isDark ? '#888' : '#999'}
-            value={name}
-            onChangeText={setName}
-            autoCapitalize="words"
-          />
-        </View>
-
         <View style={styles.inputGroup}>
           <Text style={styles.label}>Email</Text>
           <TextInput
@@ -186,7 +168,7 @@ export default function SignupScreen() {
           <View style={styles.passwordContainer}>
             <TextInput
               style={styles.passwordInput}
-              placeholder="Create a password"
+              placeholder="Enter your password"
               placeholderTextColor={isDark ? '#888' : '#999'}
               value={password}
               onChangeText={setPassword}
@@ -200,37 +182,22 @@ export default function SignupScreen() {
               />
             </TouchableOpacity>
           </View>
+          <TouchableOpacity 
+            style={styles.forgotPasswordLink} 
+            onPress={() => router.push('/forgot-password')}
+          >
+            <Text style={styles.forgotPasswordText}>Forgot Password?</Text>
+          </TouchableOpacity>
         </View>
 
-        <View style={styles.inputGroup}>
-          <Text style={styles.label}>Confirm Password</Text>
-          <View style={styles.passwordContainer}>
-            <TextInput
-              style={styles.passwordInput}
-              placeholder="Confirm your password"
-              placeholderTextColor={isDark ? '#888' : '#999'}
-              value={confirmPassword}
-              onChangeText={setConfirmPassword}
-              secureTextEntry={!showConfirmPassword}
-            />
-            <TouchableOpacity onPress={() => setShowConfirmPassword(!showConfirmPassword)}>
-              <Ionicons 
-                name={showConfirmPassword ? 'eye-off' : 'eye'} 
-                size={24} 
-                style={styles.eyeIcon}
-              />
-            </TouchableOpacity>
-          </View>
-        </View>
-
-        <TouchableOpacity style={styles.button} onPress={handleSignup}>
-          <Text style={styles.buttonText}>Create Account</Text>
+        <TouchableOpacity style={styles.button} onPress={handleLogin}>
+          <Text style={styles.buttonText}>Sign In</Text>
         </TouchableOpacity>
 
-        <View style={styles.loginContainer}>
-          <Text style={styles.loginText}>Already have an account? </Text>
-          <TouchableOpacity onPress={() => router.push('/login')}>
-            <Text style={styles.loginLink}>Sign In</Text>
+        <View style={styles.signupContainer}>
+          <Text style={styles.signupText}>Don't have an account? </Text>
+          <TouchableOpacity onPress={() => router.push('/signup')}>
+            <Text style={styles.signupLink}>Sign Up</Text>
           </TouchableOpacity>
         </View>
       </View>

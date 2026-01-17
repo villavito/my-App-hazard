@@ -1,24 +1,23 @@
-
-// Import the functions you need from the SDKs you need
+import { initializeApp } from 'firebase/app';
+import { getAuth } from 'firebase/auth';
+import { getFirestore } from 'firebase/firestore';
 
 // Your web app's Firebase configuration
 const firebaseConfig = {
-  apiKey: "AIzaSyCMz8fLrVUG-ujxt1SSjiN537p_yCMQnPg",
-  authDomain: "thehazard-75651.firebaseapp.com",
-  databaseURL: "https://thehazard-75651-default-rtdb.asia-southeast1.firebasedatabase.app",
-  projectId: "thehazard-75651",
-  storageBucket: "thehazard-75651.firebasestorage.app",
-  messagingSenderId: "203788333932",
-  appId: "1:203788333932:web:3e4794421129e0f73d3949",
-  measurementId: "G-E3CBCE8VXV"
+  apiKey: "AIzaSyBxFSpEKq5Fv7vRyHaY7_G9MeoaA-mppNE",
+  authDomain: "thehazard-5f87e.firebaseapp.com",
+  projectId: "thehazard-5f87e",
+  storageBucket: "thehazard-5f87e.firebasestorage.app",
+  messagingSenderId: "364711835242",
+  appId: "1:364711835242:web:efeeb73cee5e41aa007c13",
+  measurementId: "G-1WXP5HPNBZ"
 };
 
-// Initialize Firebase - uncomment after installing Firebase
-// const app = initializeApp(firebaseConfig);
-// const analytics = getAnalytics(app);
-// const auth = getAuth(app);
-// const db = getFirestore(app);
+// Initialize Firebase
+const app = initializeApp(firebaseConfig);
 
-// Uncomment these exports after installing Firebase
-// export { analytics, auth, createUserWithEmailAndPassword, db, doc, getDoc, sendPasswordResetEmail, setDoc, signInWithEmailAndPassword, signOut };
+// Initialize Firebase services
+export const auth = getAuth(app);
+export const db = getFirestore(app);
 
+export default app;
