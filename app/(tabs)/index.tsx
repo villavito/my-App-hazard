@@ -1,98 +1,144 @@
-import { Image } from 'expo-image';
-import { Platform, StyleSheet } from 'react-native';
-
-import { HelloWave } from '@/components/hello-wave';
-import ParallaxScrollView from '@/components/parallax-scroll-view';
-import { ThemedText } from '@/components/themed-text';
-import { ThemedView } from '@/components/themed-view';
-import { Link } from 'expo-router';
+import { Ionicons } from '@expo/vector-icons';
+import { useRouter } from 'expo-router';
+import { ScrollView, StyleSheet, Text, TouchableOpacity, useColorScheme, View } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
 
 export default function HomeScreen() {
-  return (
-    <ParallaxScrollView
-      headerBackgroundColor={{ light: '#A1CEDC', dark: '#1D3D47' }}
-      headerImage={
-        <Image
-          source={require('@/assets/images/partial-react-logo.png')}
-          style={styles.reactLogo}
-        />
-      }>
-      <ThemedView style={styles.titleContainer}>
-        <ThemedText type="title">Welcome!</ThemedText>
-        <HelloWave />
-      </ThemedView>
-      <ThemedView style={styles.stepContainer}>
-        <ThemedText type="subtitle">Step 1: Try it</ThemedText>
-        <ThemedText>
-          Edit <ThemedText type="defaultSemiBold">app/(tabs)/index.tsx</ThemedText> to see changes.
-          Press{' '}
-          <ThemedText type="defaultSemiBold">
-            {Platform.select({
-              ios: 'cmd + d',
-              android: 'cmd + m',
-              web: 'F12',
-            })}
-          </ThemedText>{' '}
-          to open developer tools.
-        </ThemedText>
-      </ThemedView>
-      <ThemedView style={styles.stepContainer}>
-        <Link href="/modal">
-          <Link.Trigger>
-            <ThemedText type="subtitle">Step 2: Explore</ThemedText>
-          </Link.Trigger>
-          <Link.Preview />
-          <Link.Menu>
-            <Link.MenuAction title="Action" icon="cube" onPress={() => alert('Action pressed')} />
-            <Link.MenuAction
-              title="Share"
-              icon="square.and.arrow.up"
-              onPress={() => alert('Share pressed')}
-            />
-            <Link.Menu title="More" icon="ellipsis">
-              <Link.MenuAction
-                title="Delete"
-                icon="trash"
-                destructive
-                onPress={() => alert('Delete pressed')}
-              />
-            </Link.Menu>
-          </Link.Menu>
-        </Link>
+  const colorScheme = useColorScheme();
+  const isDark = colorScheme === 'dark';
+  const router = useRouter();
 
-        <ThemedText>
-          {`Tap the Explore tab to learn more about what's included in this starter app.`}
-        </ThemedText>
-      </ThemedView>
-      <ThemedView style={styles.stepContainer}>
-        <ThemedText type="subtitle">Step 3: Get a fresh start</ThemedText>
-        <ThemedText>
-          {`When you're ready, run `}
-          <ThemedText type="defaultSemiBold">npm run reset-project</ThemedText> to get a fresh{' '}
-          <ThemedText type="defaultSemiBold">app</ThemedText> directory. This will move the current{' '}
-          <ThemedText type="defaultSemiBold">app</ThemedText> to{' '}
-          <ThemedText type="defaultSemiBold">app-example</ThemedText>.
-        </ThemedText>
-      </ThemedView>
-    </ParallaxScrollView>
+  const styles = StyleSheet.create({
+    container: {
+      flex: 1,
+      backgroundColor: isDark ? '#000' : '#fff',
+    },
+    scrollView: {
+      flex: 1,
+    },
+    header: {
+      padding: 20,
+      paddingTop: 40,
+      backgroundColor: isDark ? '#1a1a1a' : '#f8f9fa',
+      alignItems: 'center',
+    },
+    title: {
+      fontSize: 32,
+      fontWeight: 'bold',
+      color: isDark ? '#fff' : '#000',
+      marginBottom: 8,
+    },
+    subtitle: {
+      fontSize: 16,
+      color: isDark ? '#888' : '#666',
+    },
+    section: {
+      padding: 20,
+    },
+    sectionTitle: {
+      fontSize: 24,
+      fontWeight: '600',
+      color: isDark ? '#fff' : '#000',
+      marginBottom: 16,
+    },
+    featureList: {
+      gap: 12,
+    },
+    featureItem: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      backgroundColor: isDark ? '#2a2a2a' : '#f8f9fa',
+      padding: 16,
+      borderRadius: 12,
+    },
+    featureIcon: {
+      fontSize: 24,
+      marginRight: 16,
+    },
+    featureText: {
+      flex: 1,
+    },
+    featureTitle: {
+      fontSize: 16,
+      fontWeight: '600',
+      color: isDark ? '#fff' : '#000',
+      marginBottom: 4,
+    },
+    featureDescription: {
+      fontSize: 14,
+      color: isDark ? '#888' : '#666',
+    },
+    button: {
+      backgroundColor: '#007AFF',
+      paddingVertical: 16,
+      paddingHorizontal: 32,
+      borderRadius: 12,
+      alignItems: 'center',
+      marginTop: 20,
+    },
+    buttonText: {
+      color: '#fff',
+      fontSize: 18,
+      fontWeight: '600',
+    },
+  });
+
+  const features: Array<{
+    icon: keyof typeof Ionicons.glyphMap;
+    title: string;
+    description: string;
+  }> = [
+    {
+      icon: 'shield-checkmark-outline',
+      title: 'Safety First',
+      description: 'Advanced hazard detection and prevention systems',
+    },
+    {
+      icon: 'analytics-outline',
+      title: 'Real-time Analytics',
+      description: 'Monitor and analyze potential risks instantly',
+    },
+    {
+      icon: 'notifications-outline',
+      title: 'Smart Alerts',
+      description: 'Get notified about hazards before they become critical',
+    },
+  ];
+
+  return (
+    <SafeAreaView style={styles.container}>
+      <ScrollView style={styles.scrollView} showsVerticalScrollIndicator={false}>
+        <View style={styles.header}>
+          <Text style={styles.title}>Hazard</Text>
+          <Text style={styles.subtitle}>Your safety companion</Text>
+        </View>
+
+        <View style={styles.section}>
+          <TouchableOpacity style={styles.button} onPress={() => router.push('/login')}>
+            <Text style={styles.buttonText}>Get Started</Text>
+          </TouchableOpacity>
+        </View>
+
+        <View style={styles.section}>
+          <Text style={styles.sectionTitle}>Key Features</Text>
+          <View style={styles.featureList}>
+            {features.map((feature, index) => (
+              <View key={index} style={styles.featureItem}>
+                <Ionicons 
+                  name={feature.icon} 
+                  size={24} 
+                  color="#007AFF"
+                  style={styles.featureIcon}
+                />
+                <View style={styles.featureText}>
+                  <Text style={styles.featureTitle}>{feature.title}</Text>
+                  <Text style={styles.featureDescription}>{feature.description}</Text>
+                </View>
+              </View>
+            ))}
+          </View>
+        </View>
+      </ScrollView>
+    </SafeAreaView>
   );
 }
-
-const styles = StyleSheet.create({
-  titleContainer: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 8,
-  },
-  stepContainer: {
-    gap: 8,
-    marginBottom: 8,
-  },
-  reactLogo: {
-    height: 178,
-    width: 290,
-    bottom: 0,
-    left: 0,
-    position: 'absolute',
-  },
-});
