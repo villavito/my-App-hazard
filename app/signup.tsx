@@ -3,18 +3,18 @@ import { useRouter } from 'expo-router';
 import { useState } from 'react';
 import { Alert, StyleSheet, Text, TextInput, TouchableOpacity, useColorScheme, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { createUserWithRole } from '../services/authService';
+import { useAuth } from '../contexts/AuthContext';
 
 export default function SignupScreen() {
   const colorScheme = useColorScheme();
   const isDark = colorScheme === 'dark';
+  const { signUp } = useAuth();
   const [name, setName] = useState('');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
   const [showConfirmPassword, setShowConfirmPassword] = useState(false);
-  const [loading, setLoading] = useState(false);
   const router = useRouter();
 
   const styles = StyleSheet.create({
@@ -112,14 +112,8 @@ export default function SignupScreen() {
   });
 
   const handleSignup = async () => {
-    // Basic validation
-    if (!name || !email || !password || !confirmPassword) {
+    if (!email.trim() || !password.trim() || !name.trim()) {
       Alert.alert('Error', 'Please fill in all fields');
-      return;
-    }
-
-    if (password !== confirmPassword) {
-      Alert.alert('Error', 'Passwords do not match');
       return;
     }
 
@@ -128,23 +122,36 @@ export default function SignupScreen() {
       return;
     }
 
-    setLoading(true);
+    console.log('Starting signup process...');
+    console.log('Available functions:', { signUp: typeof signUp });
+    
+    if (typeof signUp !== 'function') {
+      Alert.alert('Error', 'Authentication system not available');
+      return;
+    }
+
     try {
       console.log('Attempting to create user with:', { email, name, role: 'user' });
-      const result = await createUserWithRole(email, password, name, 'user');
+      const result = await signUp(email, password, name, 'user');
       console.log('Signup result:', result);
       
       if (result.success) {
-        Alert.alert('Success', 'Account created successfully! Please sign in.');
-        router.push('/login');
+        Alert.alert(
+          'Account Created Successfully! 🎉',
+          `Welcome ${name}! Your account has been created. Please sign in to continue.`,
+          [
+            {
+              text: 'OK',
+              onPress: () => router.push('/login')
+            }
+          ]
+        );
       } else {
-        Alert.alert('Signup Error', result.error);
+        Alert.alert('Signup Error', result.error || 'Registration failed');
       }
     } catch (error: any) {
       console.error('Signup component error:', error);
       Alert.alert('Signup Error', error.message);
-    } finally {
-      setLoading(false);
     }
   };
 

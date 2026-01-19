@@ -14,10 +14,48 @@ const firebaseConfig = {
 };
 
 // Initialize Firebase
-const app = initializeApp(firebaseConfig);
+let app: any = null;
+let auth: any = null;
+let db: any = null;
 
-// Initialize Firebase services
-export const auth = getAuth(app);
-export const db = getFirestore(app);
+// Initialize Firebase on first use
+const initializeFirebase = () => {
+  if (!app) {
+    try {
+      app = initializeApp(firebaseConfig);
+      auth = getAuth(app);
+      db = getFirestore(app);
+      console.log('Firebase initialized successfully');
+    } catch (error) {
+      console.error('Firebase initialization error:', error);
+      throw error;
+    }
+  }
+  return { app, auth, db };
+};
 
+// Lazy initialization functions
+export const getFirebaseAuth = () => {
+  if (!auth) {
+    initializeFirebase();
+  }
+  return auth;
+};
+
+export const getFirebaseDB = () => {
+  if (!db) {
+    initializeFirebase();
+  }
+  return db;
+};
+
+export const getFirebaseApp = () => {
+  if (!app) {
+    initializeFirebase();
+  }
+  return app;
+};
+
+// For backward compatibility - these will initialize Firebase when accessed
+export { auth, db };
 export default app;

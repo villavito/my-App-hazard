@@ -6,7 +6,7 @@ import { useEffect, useState } from 'react';
 import { Alert, Image, StyleSheet, Text, TextInput, TouchableOpacity, useColorScheme, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import LocationModal from '../components/LocationModal';
-import { db } from '../config/firebase';
+import { getFirebaseDB } from '../config/firebase';
 import { useAuth } from '../contexts/AuthContext';
 
 export default function CaptureHazardScreen() {
@@ -155,36 +155,8 @@ export default function CaptureHazardScreen() {
     },
   });
 
-  const requestCameraPermission = async () => {
-    const { status } = await ImagePicker.requestCameraPermissionsAsync();
-    return status === 'granted';
-  };
-
-  const takePicture = async () => {
-    const hasPermission = await requestCameraPermission();
-    if (!hasPermission) {
-      Alert.alert('Permission Required', 'Camera permission is required to take photos');
-      return;
-    }
-
-    try {
-      const result = await ImagePicker.launchCameraAsync({
-        mediaTypes: ImagePicker.MediaTypeOptions.Images,
-        allowsEditing: false,
-        aspect: [4, 3],
-        quality: 1.0,
-        cameraType: ImagePicker.CameraType.back,
-      });
-
-      if (!result.canceled && result.assets[0]) {
-        setImage(result.assets[0].uri);
-      }
-    } catch (error) {
-      console.error('Error taking picture:', error);
-      Alert.alert('Error', 'Failed to take picture');
-    }
-  };
-
+  
+  
   const uploadPicture = async () => {
     const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
     if (status !== 'granted') {
@@ -238,7 +210,7 @@ export default function CaptureHazardScreen() {
         updatedAt: serverTimestamp(),
       };
 
-      await setDoc(doc(db, 'hazards', hazardId), hazardData);
+      await setDoc(doc(getFirebaseDB(), 'hazards', hazardId), hazardData);
 
       Alert.alert('Success', 'Hazard report submitted successfully!');
       router.back();

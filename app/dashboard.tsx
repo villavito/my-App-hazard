@@ -10,6 +10,13 @@ export default function UserDashboard() {
   const router = useRouter();
   const { user, userRole } = useAuth();
 
+  // Debug: Log what data we're getting
+  console.log('Dashboard - User object:', user);
+  console.log('Dashboard - UserRole object:', userRole);
+  console.log('Dashboard - User email:', user?.email);
+  console.log('Dashboard - UserRole email:', userRole?.email);
+  console.log('Dashboard - UserRole displayName:', userRole?.displayName);
+
   const styles = StyleSheet.create({
     container: {
       flex: 1,
@@ -75,6 +82,10 @@ export default function UserDashboard() {
       justifyContent: 'space-between',
       marginBottom: 24,
     },
+    statsRow: {
+      flexDirection: 'row',
+      justifyContent: 'space-between',
+    },
     statCard: {
       backgroundColor: isDark ? '#2a2a2a' : '#f8f9fa',
       padding: 16,
@@ -107,6 +118,58 @@ export default function UserDashboard() {
       fontSize: 18,
       fontWeight: '600',
     },
+    profileCard: {
+      backgroundColor: isDark ? '#2a2a2a' : '#f8f9fa',
+      padding: 20,
+      borderRadius: 12,
+      marginBottom: 24,
+    },
+    profileHeader: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      marginBottom: 16,
+    },
+    avatar: {
+      width: 60,
+      height: 60,
+      borderRadius: 30,
+      backgroundColor: isDark ? '#4a4a4a' : '#dee2e6',
+      justifyContent: 'center',
+      alignItems: 'center',
+      marginRight: 16,
+    },
+    avatarText: {
+      fontSize: 20,
+      fontWeight: 'bold',
+      color: isDark ? '#fff' : '#000',
+    },
+    profileInfo: {
+      flex: 1,
+    },
+    profileName: {
+      fontSize: 18,
+      fontWeight: '600',
+      color: isDark ? '#fff' : '#000',
+      marginBottom: 4,
+    },
+    profileEmail: {
+      fontSize: 14,
+      color: isDark ? '#888' : '#666',
+      marginBottom: 4,
+    },
+    profileRole: {
+      fontSize: 14,
+      color: '#007AFF',
+      fontWeight: '500',
+    },
+    profileButton: {
+      padding: 8,
+      borderRadius: 6,
+      backgroundColor: isDark ? '#3a3a3a' : '#e9ecef',
+    },
+    myReportsButton: {
+      backgroundColor: '#007AFF',
+    },
   });
 
   const handleLogout = async () => {
@@ -114,11 +177,11 @@ export default function UserDashboard() {
     router.push('/login');
   };
 
-  const features: Array<{
+  const features: {
     icon: string;
     title: string;
     description: string;
-  }> = [
+  }[] = [
     {
       icon: 'camera-outline',
       title: 'Capture the Hazard',
@@ -133,10 +196,46 @@ export default function UserDashboard() {
           <Text style={styles.welcomeText}>
             Welcome, {userRole?.displayName || 'User'}!
           </Text>
-          <Text style={styles.subtitle}>Your dashboard</Text>
+          <Text style={styles.subtitle}>{user?.email || userRole?.email || 'Your dashboard'}</Text>
         </View>
 
         <View style={styles.content}>
+          {/* User Profile Section */}
+          <View style={styles.profileCard}>
+            <View style={styles.profileHeader}>
+              <View style={styles.avatar}>
+                <Text style={styles.avatarText}>
+                  {(userRole?.displayName || 'User').split(' ').map(word => word[0]).join('').toUpperCase().slice(0, 2)}
+                </Text>
+              </View>
+              <View style={styles.profileInfo}>
+                <Text style={styles.profileName}>{userRole?.displayName || 'Welcome User'}</Text>
+                <Text style={styles.profileEmail}>{user?.email || userRole?.email || 'No email available'}</Text>
+                <Text style={styles.profileRole}>{userRole?.role?.replace('_', ' ') || 'user'}</Text>
+              </View>
+              <TouchableOpacity 
+                style={styles.profileButton} 
+                onPress={() => router.push('/profile')}
+              >
+                <Ionicons name="settings-outline" size={20} color="#007AFF" />
+              </TouchableOpacity>
+            </View>
+          </View>
+
+          <View style={styles.section}>
+            <Text style={styles.sectionTitle}>My Reports</Text>
+            <TouchableOpacity 
+              style={[styles.card, styles.myReportsButton]} 
+              onPress={() => router.push('/my-reports')}
+            >
+              <Ionicons name="document-text-outline" size={24} style={styles.cardIcon} />
+              <View style={styles.cardContent}>
+                <Text style={styles.cardTitle}>View My Reports</Text>
+                <Text style={styles.cardDescription}>Check status of your submitted hazard reports</Text>
+              </View>
+            </TouchableOpacity>
+          </View>
+
           <View style={styles.section}>
             <Text style={styles.sectionTitle}>Quick Actions</Text>
             {features.map((feature, index) => (

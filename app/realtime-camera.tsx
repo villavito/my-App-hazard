@@ -2,16 +2,13 @@ import { Ionicons } from '@expo/vector-icons';
 import { CameraView, useCameraPermissions } from 'expo-camera';
 import { useRouter } from 'expo-router';
 import React, { useState } from 'react';
-import { Alert, StyleSheet, Text, TouchableOpacity, useColorScheme, View } from 'react-native';
+import { Alert, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 export default function RealtimeCameraScreen() {
-  const colorScheme = useColorScheme();
-  const isDark = colorScheme === 'dark';
   const router = useRouter();
   const [permission, requestPermission] = useCameraPermissions();
   const [facing, setFacing] = useState<'back' | 'front'>('back');
-  const [isRecording, setIsRecording] = useState(false);
   const cameraRef = React.useRef<CameraView>(null);
 
   const styles = StyleSheet.create({

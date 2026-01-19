@@ -12,11 +12,12 @@ import {
     updateDoc,
     where
 } from 'firebase/firestore';
-import { db } from '../config/firebase';
+import { getFirebaseDB } from '../config/firebase';
 
 // User Services
 export const createUserDocument = async (userData: any) => {
   try {
+    const db = getFirebaseDB();
     const userRef = doc(db, 'users', userData.uid);
     await setDoc(userRef, {
       ...userData,
@@ -32,6 +33,7 @@ export const createUserDocument = async (userData: any) => {
 
 export const getUserDocument = async (uid: string) => {
   try {
+    const db = getFirebaseDB();
     const userRef = doc(db, 'users', uid);
     const userDoc = await getDoc(userRef);
     if (userDoc.exists()) {
@@ -46,6 +48,7 @@ export const getUserDocument = async (uid: string) => {
 
 export const updateUserLastLogin = async (uid: string) => {
   try {
+    const db = getFirebaseDB();
     const userRef = doc(db, 'users', uid);
     await updateDoc(userRef, {
       lastLogin: serverTimestamp()
@@ -60,6 +63,7 @@ export const updateUserLastLogin = async (uid: string) => {
 // Hazard Services
 export const createHazardReport = async (hazardData: any) => {
   try {
+    const db = getFirebaseDB();
     const hazardId = `${hazardData.userId}_${Date.now()}`;
     const hazardRef = doc(db, 'hazards', hazardId);
     
@@ -81,10 +85,11 @@ export const createHazardReport = async (hazardData: any) => {
 
 export const getUserHazards = async (userId: string) => {
   try {
+    const db = getFirebaseDB();
+    // Simplify query to avoid composite index requirement
     const hazardsQuery = query(
       collection(db, 'hazards'),
-      where('userId', '==', userId),
-      orderBy('createdAt', 'desc')
+      where('userId', '==', userId)
     );
     const querySnapshot = await getDocs(hazardsQuery);
     
@@ -93,17 +98,26 @@ export const getUserHazards = async (userId: string) => {
       ...doc.data()
     }));
     
-    return { success: true, data: hazards };
+    // Sort in JavaScript instead of Firestore
+    const sortedHazards = hazards.sort((a, b) => {
+      const aTime = a.createdAt?.toMillis?.() || 0;
+      const bTime = b.createdAt?.toMillis?.() || 0;
+      return bTime - aTime; // Descending order
+    });
+    
+    return { success: true, data: sortedHazards };
   } catch (error) {
     console.error('Error getting user hazards:', error);
     return { success: false, error };
   }
 };
 
-export const getAllHazards = async (limitCount = 50) => {
+export const getAllHazards = async (limitCount: number = 10) => {
   try {
+    const db = getFirebaseDB();
+    const hazardsCollection = collection(db, 'hazards');
     const hazardsQuery = query(
-      collection(db, 'hazards'),
+      hazardsCollection,
       orderBy('createdAt', 'desc'),
       limit(limitCount)
     );
@@ -121,22 +135,9 @@ export const getAllHazards = async (limitCount = 50) => {
   }
 };
 
-export const updateHazardStatus = async (hazardId: string, status: string) => {
-  try {
-    const hazardRef = doc(db, 'hazards', hazardId);
-    await updateDoc(hazardRef, {
-      status,
-      updatedAt: serverTimestamp()
-    });
-    return { success: true };
-  } catch (error) {
-    console.error('Error updating hazard status:', error);
-    return { success: false, error };
-  }
-};
-
 export const deleteHazardReport = async (hazardId: string) => {
   try {
+    const db = getFirebaseDB();
     const hazardRef = doc(db, 'hazards', hazardId);
     await deleteDoc(hazardRef);
     return { success: true };
@@ -149,6 +150,7 @@ export const deleteHazardReport = async (hazardId: string) => {
 // Admin Services
 export const getAllUsers = async () => {
   try {
+    const db = getFirebaseDB();
     const usersQuery = query(
       collection(db, 'users'),
       orderBy('createdAt', 'desc')
@@ -169,6 +171,7 @@ export const getAllUsers = async () => {
 
 export const updateUserRole = async (uid: string, role: string) => {
   try {
+    const db = getFirebaseDB();
     const userRef = doc(db, 'users', uid);
     await updateDoc(userRef, { role });
     return { success: true };
@@ -186,7 +189,7 @@ export const getHazardStatistics = async () => {
       return { success: false, error: allHazardsResult.error };
     }
     
-    const hazards = allHazardsResult.data;
+    const hazards = allHazardsResult.data || [];
     
     const stats = {
       total: hazards.length,
@@ -205,5 +208,46 @@ export const getHazardStatistics = async () => {
   } catch (error) {
     console.error('Error getting hazard statistics:', error);
     return { success: false, error };
+  }
+};
+
+// Hazard Report Management
+export const getHazardReports = async () => {
+  try {
+    const db = getFirebaseDB();
+    const hazardsCollection = collection(db, 'hazards');
+    const q = query(hazardsCollection, orderBy('createdAt', 'desc'));
+    const querySnapshot = await getDocs(q);
+    
+    const reports = querySnapshot.docs.map(doc => {
+      const data = doc.data();
+      return {
+        id: doc.id,
+        ...data,
+        createdAt: data.createdAt,
+      };
+    });
+    
+    return { success: true, data: reports };
+  } catch (error: any) {
+    console.error('Error getting hazard reports:', error);
+    return { success: false, error: error.message };
+  }
+};
+
+export const updateHazardStatus = async (hazardId: string, status: 'approved' | 'declined') => {
+  try {
+    const db = getFirebaseDB();
+    const hazardRef = doc(db, 'hazards', hazardId);
+    
+    await updateDoc(hazardRef, {
+      status: status,
+      updatedAt: serverTimestamp(),
+    });
+    
+    return { success: true };
+  } catch (error: any) {
+    console.error('Error updating hazard status:', error);
+    return { success: false, error: error.message };
   }
 };

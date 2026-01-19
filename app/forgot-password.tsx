@@ -1,15 +1,14 @@
 import { useRouter } from 'expo-router';
-import { sendPasswordResetEmail } from 'firebase/auth';
 import { useState } from 'react';
 import { Alert, StyleSheet, Text, TextInput, TouchableOpacity, useColorScheme, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { auth } from '../config/firebase';
+import { useAuth } from '../contexts/AuthContext';
 
 export default function ForgotPasswordScreen() {
   const colorScheme = useColorScheme();
   const isDark = colorScheme === 'dark';
+  const { forgotPassword, loading } = useAuth();
   const [email, setEmail] = useState('');
-  const [loading, setLoading] = useState(false);
   const router = useRouter();
 
   const styles = StyleSheet.create({
@@ -99,51 +98,41 @@ export default function ForgotPasswordScreen() {
   });
 
   const handleResetPassword = async () => {
-    if (!email) {
+    if (!email.trim()) {
       Alert.alert('Error', 'Please enter your email address');
       return;
     }
 
-    // Basic email validation
-    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-    if (!emailRegex.test(email)) {
-      Alert.alert('Error', 'Please enter a valid email address');
+    console.log('Starting password reset process...');
+    console.log('Available functions:', { forgotPassword: typeof forgotPassword });
+    
+    if (typeof forgotPassword !== 'function') {
+      Alert.alert('Error', 'Authentication system not available');
       return;
     }
 
-    setLoading(true);
     try {
-      await sendPasswordResetEmail(auth, email);
-      Alert.alert(
-        'Reset Email Sent',
-        'A password reset link has been sent to your email. Please check your inbox and follow the instructions.',
-        [
-          {
-            text: 'OK',
-            onPress: () => router.push('/login'),
-          },
-        ]
-      );
-    } catch (error: any) {
-      let errorMessage = 'Failed to send reset email';
+      console.log('Attempting to reset password for:', { email });
+      const result = await forgotPassword(email);
+      console.log('Password reset result:', result);
       
-      switch (error.code) {
-        case 'auth/user-not-found':
-          errorMessage = 'No account found with this email address';
-          break;
-        case 'auth/invalid-email':
-          errorMessage = 'Invalid email address';
-          break;
-        case 'auth/network-request-failed':
-          errorMessage = 'Network error. Please check your connection';
-          break;
-        default:
-          errorMessage = error.message;
+      if (result.success) {
+        Alert.alert(
+          'Reset Email Sent',
+          'A password reset link has been sent to your email. Please check your inbox and follow the instructions.',
+          [
+            {
+              text: 'OK',
+              onPress: () => router.push('/login'),
+            },
+          ]
+        );
+      } else {
+        Alert.alert('Reset Error', result.error || 'Failed to send reset email');
       }
-      
-      Alert.alert('Error', errorMessage);
-    } finally {
-      setLoading(false);
+    } catch (error: any) {
+      console.error('Password reset component error:', error);
+      Alert.alert('Reset Error', error.message || 'Failed to send reset email');
     }
   };
 
@@ -157,7 +146,7 @@ export default function ForgotPasswordScreen() {
       <View style={styles.form}>
         <View style={styles.infoBox}>
           <Text style={styles.infoText}>
-            Enter your email address and we'll send you a link to reset your password.
+            Enter your email address and we&apos;ll send you a link to reset your password.
           </Text>
         </View>
 

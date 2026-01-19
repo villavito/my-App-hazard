@@ -8,7 +8,7 @@ export default function AdminDashboard() {
   const colorScheme = useColorScheme();
   const isDark = colorScheme === 'dark';
   const router = useRouter();
-  const { user, userRole } = useAuth();
+  const { userRole } = useAuth();
 
   const styles = StyleSheet.create({
     container: {

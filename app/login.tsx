@@ -3,15 +3,15 @@ import { useRouter } from 'expo-router';
 import { useState } from 'react';
 import { Alert, StyleSheet, Text, TextInput, TouchableOpacity, useColorScheme, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { signInUser } from '../services/authService';
+import { useAuth } from '../contexts/AuthContext';
 
 export default function LoginScreen() {
   const colorScheme = useColorScheme();
   const isDark = colorScheme === 'dark';
+  const { signIn } = useAuth();
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
-  const [loading, setLoading] = useState(false);
   const router = useRouter();
 
   const styles = StyleSheet.create({
@@ -118,12 +118,28 @@ export default function LoginScreen() {
       return;
     }
 
-    setLoading(true);
+    // Basic email validation
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+    if (!emailRegex.test(email)) {
+      Alert.alert('Error', 'Please enter a valid email address');
+      return;
+    }
+
+    console.log('Starting login process...');
+    console.log('Available functions:', { signIn: typeof signIn });
+    
+    if (typeof signIn !== 'function') {
+      Alert.alert('Error', 'Authentication system not available');
+      return;
+    }
+
     try {
-      const result = await signInUser(email, password);
+      console.log('Attempting to sign in with:', { email });
+      const result = await signIn(email, password);
+      console.log('Login result:', result);
       
       if (result.success && result.user) {
-        Alert.alert('Success', `Welcome back! You are logged in as ${result.user.role}`);
+        Alert.alert('Success', `Welcome back, ${result.user.displayName}!`);
         // Navigate based on user role
         if (result.user.role === 'super_admin') {
           router.push('/admin/super-admin');
@@ -136,9 +152,8 @@ export default function LoginScreen() {
         Alert.alert('Login Error', result.error || 'Login failed');
       }
     } catch (error: any) {
+      console.error('Login component error:', error);
       Alert.alert('Login Error', error.message);
-    } finally {
-      setLoading(false);
     }
   };
 
@@ -195,7 +210,7 @@ export default function LoginScreen() {
         </TouchableOpacity>
 
         <View style={styles.signupContainer}>
-          <Text style={styles.signupText}>Don't have an account? </Text>
+          <Text style={styles.signupText}>Don&apos;t have an account? </Text>
           <TouchableOpacity onPress={() => router.push('/signup')}>
             <Text style={styles.signupLink}>Sign Up</Text>
           </TouchableOpacity>

@@ -83,11 +83,11 @@ export default function HomeScreen() {
     },
   });
 
-  const features: Array<{
+  const features: {
     icon: keyof typeof Ionicons.glyphMap;
     title: string;
     description: string;
-  }> = [
+  }[] = [
     {
       icon: 'shield-checkmark-outline',
       title: 'Safety First',

@@ -15,6 +15,11 @@ export default function ProfileScreen() {
   const [displayName, setDisplayName] = useState(userRole?.displayName || '');
   const [isLoading, setIsLoading] = useState(false);
 
+  // Debug: Log user object to see what's available
+  console.log('User object:', user);
+  console.log('User email:', user?.email);
+  console.log('UserRole object:', userRole);
+
   const styles = StyleSheet.create({
     container: {
       flex: 1,
@@ -133,22 +138,35 @@ export default function ProfileScreen() {
   });
 
   const handleSaveProfile = async () => {
+    console.log('Save profile button clicked!');
+    console.log('User object:', user);
+    console.log('User UID:', user?.uid);
+    console.log('Current display name:', displayName);
+    
     if (!user || !displayName.trim()) {
+      console.log('Validation failed: No user or empty display name');
       Alert.alert('Error', 'Please enter a valid name');
       return;
     }
 
+    console.log('Validation passed, proceeding with update...');
     setIsLoading(true);
     try {
-      await updateDoc(doc(db, 'users', user.uid), {
+      const userRef = doc(db, 'users', user.uid);
+      console.log('User ref:', userRef);
+      
+      await updateDoc(userRef, {
         displayName: displayName.trim(),
       });
 
+      console.log('Update successful!');
       Alert.alert('Success', 'Profile updated successfully!');
       router.back();
-    } catch (error) {
+    } catch (error: any) {
       console.error('Error updating profile:', error);
-      Alert.alert('Error', 'Failed to update profile');
+      console.error('Error code:', error.code);
+      console.error('Error message:', error.message);
+      Alert.alert('Error', `Failed to update profile: ${error.message}`);
     } finally {
       setIsLoading(false);
     }
@@ -180,7 +198,7 @@ export default function ProfileScreen() {
                 {getInitials(displayName || user?.email || 'U')}
               </Text>
             </View>
-            <Text style={styles.email}>{user?.email}</Text>
+            <Text style={styles.email}>{user?.email || userRole?.email || 'No email'}</Text>
             <Text style={styles.role}>{userRole?.role?.replace('_', ' ') || 'user'}</Text>
           </View>
         </View>
