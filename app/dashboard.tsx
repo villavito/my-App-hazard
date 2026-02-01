@@ -1,6 +1,7 @@
 import { Ionicons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
-import { ScrollView, StyleSheet, Text, TouchableOpacity, useColorScheme, View } from 'react-native';
+import { useState } from 'react';
+import { Alert, Modal, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, useColorScheme, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useAuth } from '../contexts/AuthContext';
 
@@ -8,14 +9,14 @@ export default function UserDashboard() {
   const colorScheme = useColorScheme();
   const isDark = colorScheme === 'dark';
   const router = useRouter();
-  const { user, userRole } = useAuth();
+  const { user } = useAuth();
+  const [showCommentModal, setShowCommentModal] = useState(false);
+  const [comment, setComment] = useState('');
 
   // Debug: Log what data we're getting
   console.log('Dashboard - User object:', user);
-  console.log('Dashboard - UserRole object:', userRole);
   console.log('Dashboard - User email:', user?.email);
-  console.log('Dashboard - UserRole email:', userRole?.email);
-  console.log('Dashboard - UserRole displayName:', userRole?.displayName);
+  console.log('Dashboard - User displayName:', user?.displayName);
 
   const styles = StyleSheet.create({
     container: {
@@ -162,19 +163,114 @@ export default function UserDashboard() {
       color: '#007AFF',
       fontWeight: '500',
     },
-    profileButton: {
-      padding: 8,
-      borderRadius: 6,
-      backgroundColor: isDark ? '#3a3a3a' : '#e9ecef',
-    },
     myReportsButton: {
       backgroundColor: '#007AFF',
+    },
+    commentButton: {
+      backgroundColor: '#34C759',
+    },
+    modalOverlay: {
+      flex: 1,
+      backgroundColor: 'rgba(0, 0, 0, 0.5)',
+      justifyContent: 'center',
+      alignItems: 'center',
+    },
+    modalContent: {
+      backgroundColor: isDark ? '#2a2a2a' : '#fff',
+      borderRadius: 16,
+      padding: 24,
+      margin: 20,
+      width: '90%',
+      maxWidth: 400,
+    },
+    modalTitle: {
+      fontSize: 20,
+      fontWeight: 'bold',
+      color: isDark ? '#fff' : '#000',
+      marginBottom: 16,
+      textAlign: 'center',
+    },
+    modalInput: {
+      backgroundColor: isDark ? '#3a3a3a' : '#f8f9fa',
+      borderWidth: 1,
+      borderColor: isDark ? '#555' : '#ddd',
+      borderRadius: 8,
+      padding: 12,
+      fontSize: 16,
+      color: isDark ? '#fff' : '#000',
+      minHeight: 100,
+      textAlignVertical: 'top',
+      marginBottom: 16,
+    },
+    modalButtons: {
+      flexDirection: 'row',
+      justifyContent: 'space-between',
+      gap: 12,
+    },
+    modalButton: {
+      flex: 1,
+      paddingVertical: 12,
+      borderRadius: 8,
+      alignItems: 'center',
+    },
+    cancelButton: {
+      backgroundColor: isDark ? '#555' : '#e9ecef',
+    },
+    sendButton: {
+      backgroundColor: '#007AFF',
+    },
+    cancelButtonText: {
+      color: isDark ? '#fff' : '#000',
+      fontSize: 16,
+      fontWeight: '600',
+    },
+    sendButtonText: {
+      color: '#fff',
+      fontSize: 16,
+      fontWeight: '600',
     },
   });
 
   const handleLogout = async () => {
     // TODO: Implement logout logic
     router.push('/login');
+  };
+
+  const handleSendComment = () => {
+    if (!comment.trim()) {
+      Alert.alert('Error', 'Please enter a comment before sending.');
+      return;
+    }
+
+    // Store comment in localStorage (in a real app, this would go to a database)
+    try {
+      const comments = JSON.parse(localStorage.getItem('admin_comments') || '[]');
+      const newComment = {
+        id: Date.now(),
+        user: {
+          name: user?.displayName || 'Anonymous User',
+          email: user?.email || 'No email',
+          uid: user?.uid || 'unknown'
+        },
+        message: comment.trim(),
+        timestamp: new Date().toISOString(),
+        status: 'unread'
+      };
+      
+      comments.push(newComment);
+      localStorage.setItem('admin_comments', JSON.stringify(comments));
+      
+      Alert.alert(
+        'Success!',
+        'Your comment has been sent to the admin. They will review it soon.',
+        [{ text: 'OK', onPress: () => {
+          setComment('');
+          setShowCommentModal(false);
+        }}]
+      );
+    } catch (error) {
+      Alert.alert('Error', 'Failed to send comment. Please try again.');
+    }
   };
 
   const features: {
@@ -184,8 +280,8 @@ export default function UserDashboard() {
   }[] = [
     {
       icon: 'camera-outline',
-      title: 'Capture the Hazard',
-      description: 'Report and document safety hazards',
+      title: 'Capture Incident',
+      description: 'Report and document safety incidents',
     },
   ];
 
@@ -194,9 +290,9 @@ export default function UserDashboard() {
       <ScrollView showsVerticalScrollIndicator={false}>
         <View style={styles.header}>
           <Text style={styles.welcomeText}>
-            Welcome, {userRole?.displayName || 'User'}!
+            Welcome, {user?.displayName || 'User'}!
           </Text>
-          <Text style={styles.subtitle}>{user?.email || userRole?.email || 'Your dashboard'}</Text>
+          <Text style={styles.subtitle}>{user?.email || 'Your dashboard'}</Text>
         </View>
 
         <View style={styles.content}>
@@ -205,25 +301,18 @@ export default function UserDashboard() {
             <View style={styles.profileHeader}>
               <View style={styles.avatar}>
                 <Text style={styles.avatarText}>
-                  {(userRole?.displayName || 'User').split(' ').map(word => word[0]).join('').toUpperCase().slice(0, 2)}
+                  {(user?.displayName || 'User').split(' ').map(word => word[0]).join('').toUpperCase().slice(0, 2)}
                 </Text>
               </View>
               <View style={styles.profileInfo}>
-                <Text style={styles.profileName}>{userRole?.displayName || 'Welcome User'}</Text>
-                <Text style={styles.profileEmail}>{user?.email || userRole?.email || 'No email available'}</Text>
-                <Text style={styles.profileRole}>{userRole?.role?.replace('_', ' ') || 'user'}</Text>
+                <Text style={styles.profileName}>{user?.displayName || 'Welcome User'}</Text>
+                <Text style={styles.profileEmail}>{user?.email || 'No email available'}</Text>
+                <Text style={styles.profileRole}>user</Text>
               </View>
-              <TouchableOpacity 
-                style={styles.profileButton} 
-                onPress={() => router.push('/profile')}
-              >
-                <Ionicons name="settings-outline" size={20} color="#007AFF" />
-              </TouchableOpacity>
             </View>
           </View>
 
           <View style={styles.section}>
-            <Text style={styles.sectionTitle}>My Reports</Text>
             <TouchableOpacity 
               style={[styles.card, styles.myReportsButton]} 
               onPress={() => router.push('/my-reports')}
@@ -231,13 +320,23 @@ export default function UserDashboard() {
               <Ionicons name="document-text-outline" size={24} style={styles.cardIcon} />
               <View style={styles.cardContent}>
                 <Text style={styles.cardTitle}>View My Reports</Text>
-                <Text style={styles.cardDescription}>Check status of your submitted hazard reports</Text>
+                <Text style={styles.cardDescription}>Check status of your submitted incident reports</Text>
+              </View>
+            </TouchableOpacity>
+
+            <TouchableOpacity 
+              style={[styles.card, styles.commentButton]} 
+              onPress={() => setShowCommentModal(true)}
+            >
+              <Ionicons name="chatbubble-outline" size={24} style={styles.cardIcon} />
+              <View style={styles.cardContent}>
+                <Text style={styles.cardTitle}>Comment to Admin</Text>
+                <Text style={styles.cardDescription}>Send a message or feedback to the admin</Text>
               </View>
             </TouchableOpacity>
           </View>
 
           <View style={styles.section}>
-            <Text style={styles.sectionTitle}>Quick Actions</Text>
             {features.map((feature, index) => (
               <TouchableOpacity key={index} style={styles.card} onPress={() => router.push('/capture-hazard')}>
                 <Ionicons name={feature.icon as keyof typeof Ionicons.glyphMap} size={24} style={styles.cardIcon} />
@@ -254,6 +353,49 @@ export default function UserDashboard() {
           </TouchableOpacity>
         </View>
       </ScrollView>
+
+      {/* Comment Modal */}
+      <Modal
+        visible={showCommentModal}
+        transparent={true}
+        animationType="slide"
+        onRequestClose={() => setShowCommentModal(false)}
+      >
+        <View style={styles.modalOverlay}>
+          <View style={styles.modalContent}>
+            <Text style={styles.modalTitle}>Send Message to Admin</Text>
+            
+            <TextInput
+              style={styles.modalInput}
+              placeholder="Type your message or feedback here..."
+              placeholderTextColor={isDark ? '#888' : '#999'}
+              value={comment}
+              onChangeText={setComment}
+              multiline
+              autoFocus
+            />
+            
+            <View style={styles.modalButtons}>
+              <TouchableOpacity
+                style={[styles.modalButton, styles.cancelButton]}
+                onPress={() => {
+                  setComment('');
+                  setShowCommentModal(false);
+                }}
+              >
+                <Text style={styles.cancelButtonText}>Cancel</Text>
+              </TouchableOpacity>
+              
+              <TouchableOpacity
+                style={[styles.modalButton, styles.sendButton]}
+                onPress={handleSendComment}
+              >
+                <Text style={styles.sendButtonText}>Send</Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        </View>
+      </Modal>
     </SafeAreaView>
   );
 }

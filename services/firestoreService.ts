@@ -14,6 +14,9 @@ import {
 } from 'firebase/firestore';
 import { getFirebaseDB } from '../config/firebase';
 
+// Export getFirebaseDB for other components
+export { getFirebaseDB };
+
 // User Services
 export const createUserDocument = async (userData: any) => {
   try {

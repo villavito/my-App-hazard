@@ -3,6 +3,7 @@ import { useRouter } from 'expo-router';
 import { useState } from 'react';
 import { Alert, StyleSheet, Text, TextInput, TouchableOpacity, useColorScheme, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
+import LoadingScreen from '../components/LoadingScreen';
 import { useAuth } from '../contexts/AuthContext';
 
 export default function LoginScreen() {
@@ -12,6 +13,10 @@ export default function LoginScreen() {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
+  const [isLoading, setIsLoading] = useState(false);
+  const [passwordError, setPasswordError] = useState('');
+  const [emailError, setEmailError] = useState('');
+  const [signInError, setSignInError] = useState('');
   const router = useRouter();
 
   const styles = StyleSheet.create({
@@ -110,18 +115,47 @@ export default function LoginScreen() {
       fontSize: 14,
       fontWeight: '600',
     },
+    errorText: {
+      color: '#FF3B30',
+      fontSize: 14,
+      marginTop: 5,
+    },
+    signInErrorContainer: {
+      backgroundColor: '#FFE5E5',
+      borderColor: '#FF3B30',
+      borderWidth: 1,
+      borderRadius: 8,
+      padding: 12,
+      marginBottom: 20,
+    },
+    signInErrorText: {
+      color: '#FF3B30',
+      fontSize: 14,
+      textAlign: 'center',
+    },
   });
 
   const handleLogin = async () => {
+    // Clear previous errors
+    setPasswordError('');
+    setEmailError('');
+    setSignInError('');
+    
     if (!email || !password) {
-      Alert.alert('Error', 'Please fill in all fields');
+      setSignInError('Please fill in all fields');
       return;
     }
 
     // Basic email validation
     const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
     if (!emailRegex.test(email)) {
-      Alert.alert('Error', 'Please enter a valid email address');
+      setEmailError('Please enter a valid email address');
+      return;
+    }
+
+    // Password validation
+    if (password.length < 1) {
+      setPasswordError('Password is required');
       return;
     }
 
@@ -129,9 +163,12 @@ export default function LoginScreen() {
     console.log('Available functions:', { signIn: typeof signIn });
     
     if (typeof signIn !== 'function') {
-      Alert.alert('Error', 'Authentication system not available');
+      setSignInError('Authentication system not available');
       return;
     }
+
+    // Set loading state
+    setIsLoading(true);
 
     try {
       console.log('Attempting to sign in with:', { email });
@@ -149,73 +186,138 @@ export default function LoginScreen() {
           router.push('/dashboard');
         }
       } else {
-        Alert.alert('Login Error', result.error || 'Login failed');
+        // Handle specific error types
+        const errorMessage = result.error || 'Login failed';
+        const lowerError = errorMessage.toLowerCase();
+        
+        if (lowerError.includes('auth/invalid-credential')) {
+          setSignInError('Wrong password or email. Please check your login details and try again.');
+        } else if (lowerError.includes('password')) {
+          setPasswordError('Incorrect password. Please try again.');
+        } else if (lowerError.includes('email') || lowerError.includes('user') || lowerError.includes('not found')) {
+          setEmailError('Email not found. Please check your email or sign up.');
+        } else if (lowerError.includes('network') || lowerError.includes('connection')) {
+          setSignInError('Network error. Please check your connection and try again.');
+        } else if (lowerError.includes('too many') || lowerError.includes('blocked') || lowerError.includes('suspended')) {
+          setSignInError('Account temporarily blocked. Please try again later.');
+        } else if (lowerError.includes('unverified') || lowerError.includes('verify')) {
+          setSignInError('Please verify your email address before signing in.');
+        } else {
+          setSignInError(errorMessage);
+        }
       }
     } catch (error: any) {
-      console.error('Login component error:', error);
-      Alert.alert('Login Error', error.message);
+      console.error('Login error:', error);
+      const errorMessage = error.message || 'Login failed';
+      const lowerError = errorMessage.toLowerCase();
+      
+      // Handle specific error types
+      if (lowerError.includes('auth/invalid-credential')) {
+        setSignInError('Wrong password or email. Please check your login details and try again.');
+      } else if (lowerError.includes('password')) {
+        setPasswordError('Incorrect password. Please try again.');
+      } else if (lowerError.includes('email') || lowerError.includes('user') || lowerError.includes('not found')) {
+        setEmailError('Email not found. Please check your email or sign up.');
+      } else if (lowerError.includes('network') || lowerError.includes('connection')) {
+        setSignInError('Network error. Please check your connection and try again.');
+      } else if (lowerError.includes('too many') || lowerError.includes('blocked') || lowerError.includes('suspended')) {
+        setSignInError('Account temporarily blocked. Please try again later.');
+      } else if (lowerError.includes('unverified') || lowerError.includes('verify')) {
+        setSignInError('Please verify your email address before signing in.');
+      } else {
+        setSignInError('An unexpected error occurred. Please try again.');
+      }
+    } finally {
+      // Reset loading state
+      setIsLoading(false);
     }
   };
 
   return (
     <SafeAreaView style={styles.container}>
-      <View style={styles.header}>
-        <Text style={styles.logo}>Hazard</Text>
-        <Text style={styles.subtitle}>Sign in to continue</Text>
-      </View>
-
-      <View style={styles.form}>
-        <View style={styles.inputGroup}>
-          <Text style={styles.label}>Email</Text>
-          <TextInput
-            style={styles.input}
-            placeholder="Enter your email"
-            placeholderTextColor={isDark ? '#888' : '#999'}
-            value={email}
-            onChangeText={setEmail}
-            keyboardType="email-address"
-            autoCapitalize="none"
-          />
-        </View>
-
-        <View style={styles.inputGroup}>
-          <Text style={styles.label}>Password</Text>
-          <View style={styles.passwordContainer}>
-            <TextInput
-              style={styles.passwordInput}
-              placeholder="Enter your password"
-              placeholderTextColor={isDark ? '#888' : '#999'}
-              value={password}
-              onChangeText={setPassword}
-              secureTextEntry={!showPassword}
-            />
-            <TouchableOpacity onPress={() => setShowPassword(!showPassword)}>
-              <Ionicons 
-                name={showPassword ? 'eye-off' : 'eye'} 
-                size={24} 
-                style={styles.eyeIcon}
-              />
-            </TouchableOpacity>
+      {isLoading ? (
+        <LoadingScreen type="login" />
+      ) : (
+        <>
+          <View style={styles.header}>
+            <Text style={styles.logo}>INCIDENT</Text>
+            <Text style={styles.subtitle}>Sign in to continue</Text>
           </View>
-          <TouchableOpacity 
-            style={styles.forgotPasswordLink} 
-            onPress={() => router.push('/forgot-password')}
-          >
-            <Text style={styles.forgotPasswordText}>Forgot Password?</Text>
-          </TouchableOpacity>
-        </View>
 
-        <TouchableOpacity style={styles.button} onPress={handleLogin}>
-          <Text style={styles.buttonText}>Sign In</Text>
-        </TouchableOpacity>
+          <View style={styles.form}>
+            {signInError ? (
+              <View style={styles.signInErrorContainer}>
+                <Text style={styles.signInErrorText}>{signInError}</Text>
+              </View>
+            ) : null}
 
-        <View style={styles.signupContainer}>
-          <Text style={styles.signupText}>Don&apos;t have an account? </Text>
-          <TouchableOpacity onPress={() => router.push('/signup')}>
-            <Text style={styles.signupLink}>Sign Up</Text>
-          </TouchableOpacity>
-        </View>
-      </View>
+            <View style={styles.inputGroup}>
+              <Text style={styles.label}>Email</Text>
+              <TextInput
+                style={styles.input}
+                placeholder="Enter your email"
+                placeholderTextColor={isDark ? '#888' : '#999'}
+                value={email}
+                onChangeText={(text) => {
+                  setEmail(text);
+                  setEmailError('');
+                  setSignInError('');
+                }}
+                keyboardType="email-address"
+                autoCapitalize="none"
+              />
+              {emailError ? (
+                <Text style={styles.errorText}>{emailError}</Text>
+              ) : null}
+            </View>
+
+            <View style={styles.inputGroup}>
+              <Text style={styles.label}>Password</Text>
+              <View style={styles.passwordContainer}>
+                <TextInput
+                  style={styles.passwordInput}
+                  placeholder="Enter your password"
+                  placeholderTextColor={isDark ? '#888' : '#999'}
+                  value={password}
+                  onChangeText={(text) => {
+                    setPassword(text);
+                    setPasswordError('');
+                    setSignInError('');
+                  }}
+                  secureTextEntry={!showPassword}
+                />
+                <TouchableOpacity onPress={() => setShowPassword(!showPassword)}>
+                  <Ionicons 
+                    name={showPassword ? 'eye-off' : 'eye'} 
+                    size={24} 
+                    style={styles.eyeIcon}
+                  />
+                </TouchableOpacity>
+              </View>
+              {passwordError ? (
+                <Text style={styles.errorText}>{passwordError}</Text>
+              ) : null}
+              <TouchableOpacity 
+                style={styles.forgotPasswordLink} 
+                onPress={() => router.push('/forgot-password')}
+              >
+                <Text style={styles.forgotPasswordText}>Forgot Password?</Text>
+              </TouchableOpacity>
+            </View>
+
+            <TouchableOpacity style={styles.button} onPress={handleLogin}>
+              <Text style={styles.buttonText}>Sign In</Text>
+            </TouchableOpacity>
+
+            <View style={styles.signupContainer}>
+              <Text style={styles.signupText}>Don&apos;t have an account? </Text>
+              <TouchableOpacity onPress={() => router.push('/register')}>
+                <Text style={styles.signupLink}>Sign Up</Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        </>
+      )}
     </SafeAreaView>
   );
 }

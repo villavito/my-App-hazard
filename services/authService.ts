@@ -1,13 +1,34 @@
+import { initializeApp } from 'firebase/app';
 import {
     createUserWithEmailAndPassword,
-    User as FirebaseUser,
+    getAuth,
     sendPasswordResetEmail,
     signInWithEmailAndPassword,
     signOut,
     updateProfile
 } from 'firebase/auth';
-import { doc, getDoc, serverTimestamp, setDoc, updateDoc } from 'firebase/firestore';
-import { getFirebaseAuth, getFirebaseDB } from '../config/firebase';
+import { doc, getDoc, getFirestore, serverTimestamp, setDoc, updateDoc } from 'firebase/firestore';
+
+// Direct Firebase initialization to bypass config issues
+const firebaseConfig = {
+  apiKey: "AIzaSyCMz8fLrVUG-ujxt1SSjiN537p_yCMQnPg",
+  authDomain: "thehazard-75651.firebaseapp.com",
+  databaseURL: "https://thehazard-75651-default-rtdb.asia-southeast1.firebasedatabase.app",
+  projectId: "thehazard-75651",
+  storageBucket: "thehazard-75651.firebasestorage.app",
+  messagingSenderId: "203788333932",
+  appId: "1:203788333932:web:3e4794421129e0f73d3949",
+  measurementId: "G-E3CBCE8VXV"
+};
+
+// Initialize Firebase directly
+const app = initializeApp(firebaseConfig);
+const auth = getAuth(app);
+const db = getFirestore(app);
+
+console.log('🔥 Firebase initialized directly in authService');
+console.log('📱 Project:', firebaseConfig.projectId);
+console.log('🔑 API Key:', firebaseConfig.apiKey.substring(0, 20) + '...');
 
 export interface UserRole {
   uid: string;
@@ -34,57 +55,74 @@ export const createUserWithRole = async (
   role: 'user' | 'admin' | 'super_admin' = 'user'
 ): Promise<AuthResult> => {
   try {
-    const auth = getFirebaseAuth();
-    const db = getFirebaseDB();
+    console.log('🔥 Starting user creation process...');
+    console.log('📧 Email:', email);
+    console.log('👤 Name:', displayName);
     
-    // Create user in Firebase Auth
-    const userCredential = await createUserWithEmailAndPassword(auth, email, password);
-    const firebaseUser = userCredential.user;
+    const firebaseUser = await createUserWithEmailAndPassword(auth, email, password);
+    console.log('✅ User created in Firebase Auth:', firebaseUser.user.uid);
+    
+    await updateProfile(firebaseUser.user, { displayName });
+    console.log('✅ Profile updated successfully');
 
-    // Update display name in Firebase Auth
-    await updateProfile(firebaseUser, { displayName });
-
-    // Create user document in Firestore with complete profile
+    console.log('📄 Creating user document in Firestore...');
     const userRole: UserRole = {
-      uid: firebaseUser.uid,
-      email: firebaseUser.email!,
+      uid: firebaseUser.user.uid,
+      email: firebaseUser.user.email!,
       displayName,
       role,
       createdAt: serverTimestamp(),
       lastLogin: serverTimestamp(),
     };
 
-    // Remove undefined fields to prevent Firestore errors
     const cleanedUserRole = Object.fromEntries(
       Object.entries(userRole).filter(([_, value]) => value !== undefined)
     );
 
-    await setDoc(doc(db, 'users', firebaseUser.uid), cleanedUserRole);
+    console.log('💾 Saving user data to Firestore:', cleanedUserRole);
+    await setDoc(doc(db, 'users', firebaseUser.user.uid), cleanedUserRole);
+    console.log('✅ User document saved successfully');
     
-    console.log('User created successfully:', userRole);
+    console.log('🎉 User creation completed successfully:', userRole);
     return { success: true, user: userRole };
   } catch (error: any) {
-    console.error('Auth service error:', error);
+    console.error('❌ Auth service error details:', {
+      code: error.code,
+      message: error.message,
+      email: error.email,
+      credential: error.credential,
+      stack: error.stack
+    });
+    
     let errorMessage = 'Registration failed';
     
-    // Handle specific Firebase errors
     switch (error.code) {
       case 'auth/email-already-in-use':
         errorMessage = 'An account with this email already exists. Please sign in instead.';
         break;
       case 'auth/weak-password':
-        errorMessage = 'Password should be at least 6 characters';
+        errorMessage = 'Password must be at least 6 characters';
+        break;
+      case 'auth/password-does-not-meet-requirements':
+        errorMessage = 'Password must contain uppercase letter, lowercase letter, number, and special character';
         break;
       case 'auth/invalid-email':
         errorMessage = 'Please enter a valid email address';
         break;
+      case 'auth/api-key-not-valid':
+        errorMessage = 'Firebase API key is invalid. Please check your configuration.';
+        break;
+      case 'auth/project-not-found':
+        errorMessage = 'Firebase project not found. Please check your project ID.';
+        break;
       case 'auth/network-request-failed':
-        errorMessage = 'Network error. Please check your connection';
+        errorMessage = 'Network error. Please check your internet connection.';
         break;
       default:
-        errorMessage = error.message || errorMessage;
+        errorMessage = error.message || 'An error occurred during registration';
     }
     
+    console.log('🚫 Returning error:', errorMessage);
     return { success: false, error: errorMessage };
   }
 };
@@ -92,25 +130,37 @@ export const createUserWithRole = async (
 // Sign in user with comprehensive error handling
 export const signInUser = async (email: string, password: string): Promise<AuthResult> => {
   try {
-    const auth = getFirebaseAuth();
-    const db = getFirebaseDB();
+    console.log('🔍 Starting sign in process for:', email);
     
+    console.log('📱 Firebase Auth instance:', auth ? 'Available' : 'Not available');
+    console.log('🔥 Firebase DB instance:', db ? 'Available' : 'Not available');
+    
+    console.log('🔐 Attempting Firebase sign in...');
     const userCredential = await signInWithEmailAndPassword(auth, email, password);
     const firebaseUser = userCredential.user;
+    
+    console.log('✅ Firebase sign in successful:', {
+      uid: firebaseUser.uid,
+      email: firebaseUser.email,
+      displayName: firebaseUser.displayName
+    });
 
     // Get user role from Firestore
+    console.log('📄 Fetching user role from Firestore...');
     const userDoc = await getDoc(doc(db, 'users', firebaseUser.uid));
     if (userDoc.exists()) {
       const userData = userDoc.data() as UserRole;
+      console.log('📋 User data found:', userData);
       
       // Update last login
       await updateDoc(doc(db, 'users', firebaseUser.uid), {
         lastLogin: serverTimestamp(),
       });
 
-      console.log('User signed in successfully:', userData);
+      console.log('✅ Sign in completed successfully');
       return { success: true, user: userData };
     } else {
+      console.log('⚠️ No user document found, creating fallback...');
       // Create user document if it doesn't exist (fallback)
       const fallbackRole: UserRole = {
         uid: firebaseUser.uid,
@@ -122,11 +172,17 @@ export const signInUser = async (email: string, password: string): Promise<AuthR
       };
       
       await setDoc(doc(db, 'users', firebaseUser.uid), fallbackRole);
-      console.log('Created fallback user document:', fallbackRole);
+      console.log('✅ Created fallback user document:', fallbackRole);
       return { success: true, user: fallbackRole };
     }
   } catch (error: any) {
-    console.error('Sign in error:', error);
+    console.error('❌ Sign in error details:', {
+      code: error.code,
+      message: error.message,
+      email: error.email,
+      credential: error.credential
+    });
+    
     let errorMessage = 'Sign in failed';
     
     // Handle specific Firebase errors
@@ -153,6 +209,7 @@ export const signInUser = async (email: string, password: string): Promise<AuthR
         errorMessage = error.message || errorMessage;
     }
     
+    console.log('🚫 Returning error:', errorMessage);
     return { success: false, error: errorMessage };
   }
 };
@@ -160,7 +217,6 @@ export const signInUser = async (email: string, password: string): Promise<AuthR
 // Get user role with caching
 export const getUserRole = async (uid: string): Promise<UserRole | null> => {
   try {
-    const db = getFirebaseDB();
     const userDoc = await getDoc(doc(db, 'users', uid));
     if (userDoc.exists()) {
       return userDoc.data() as UserRole;
@@ -175,10 +231,7 @@ export const getUserRole = async (uid: string): Promise<UserRole | null> => {
 // Update user profile
 export const updateUserProfile = async (uid: string, updates: Partial<UserRole>): Promise<AuthResult> => {
   try {
-    const db = getFirebaseDB();
-    const userRef = doc(db, 'users', uid);
-    
-    await updateDoc(userRef, {
+    await updateDoc(doc(db, 'users', uid), {
       ...updates,
     });
     
@@ -196,7 +249,6 @@ export const updateUserProfile = async (uid: string, updates: Partial<UserRole>)
 // Password reset
 export const resetPassword = async (email: string): Promise<AuthResult> => {
   try {
-    const auth = getFirebaseAuth();
     await sendPasswordResetEmail(auth, email);
     
     console.log('Password reset email sent to:', email);
@@ -212,6 +264,9 @@ export const resetPassword = async (email: string): Promise<AuthResult> => {
       case 'auth/invalid-email':
         errorMessage = 'Please enter a valid email address';
         break;
+      case 'auth/network-request-failed':
+        errorMessage = 'Network error. Please check your connection';
+        break;
       default:
         errorMessage = error.message || errorMessage;
     }
@@ -223,7 +278,6 @@ export const resetPassword = async (email: string): Promise<AuthResult> => {
 // Sign out user
 export const signOutUser = async (): Promise<AuthResult> => {
   try {
-    const auth = getFirebaseAuth();
     await signOut(auth);
     
     console.log('User signed out successfully');
@@ -245,8 +299,7 @@ export const isSuperAdmin = (userRole: UserRole): boolean => {
 };
 
 // Get current authenticated user
-export const getCurrentUser = (): FirebaseUser | null => {
-  const auth = getFirebaseAuth();
+export const getCurrentUser = (): any | null => {
   return auth.currentUser;
 };
 

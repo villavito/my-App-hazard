@@ -1,0 +1,217 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Check Firebase API Key</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            max-width: 600px;
+            margin: 50px auto;
+            padding: 20px;
+            background-color: #f5f5f5;
+        }
+        .container {
+            background: white;
+            padding: 30px;
+            border-radius: 10px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+        }
+        .status {
+            margin-top: 20px;
+            padding: 10px;
+            border-radius: 5px;
+        }
+        .success {
+            background-color: #d4edda;
+            color: #155724;
+            border: 1px solid #c3e6cb;
+        }
+        .error {
+            background-color: #f8d7da;
+            color: #721c24;
+            border: 1px solid #f5c6cb;
+        }
+        .warning {
+            background-color: #fff3cd;
+            color: #856404;
+            border: 1px solid #ffeaa7;
+        }
+        .api-key {
+            background: #f8f9fa;
+            padding: 10px;
+            border-radius: 5px;
+            font-family: monospace;
+            word-break: break-all;
+            margin: 10px 0;
+        }
+        button {
+            background-color: #007AFF;
+            color: white;
+            padding: 12px 24px;
+            border: none;
+            border-radius: 5px;
+            cursor: pointer;
+            margin-right: 10px;
+            margin-bottom: 10px;
+        }
+        button:hover {
+            background-color: #0056b3;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>🔑 Firebase API Key Checker</h1>
+        
+        <button onclick="checkCurrentConfig()">🔍 Check Current Config</button>
+        <button onclick="testAPIKey()">🧪 Test API Key</button>
+        <button onclick="forceCorrectConfig()">✅ Force Correct Config</button>
+        
+        <div id="status"></div>
+    </div>
+
+    <!-- Firebase SDK -->
+    <script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-app-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-auth-compat.js"></script>
+
+    <script>
+        // CORRECT Firebase configuration
+        const correctFirebaseConfig = {
+            apiKey: "AIzaSyCMz8fLrVUG-ujxt1SSjiN537p_yCMQnPg",
+            authDomain: "thehazard-75651.firebaseapp.com",
+            databaseURL: "https://thehazard-75651-default-rtdb.asia-southeast1.firebasedatabase.app",
+            projectId: "thehazard-75651",
+            storageBucket: "thehazard-75651.firebasestorage.app",
+            messagingSenderId: "203788333932",
+            appId: "1:203788333932:web:3e4794421129e0f73d3949",
+            measurementId: "G-E3CBCE8VXV"
+        };
+
+        // OLD/WRONG Firebase configuration
+        const wrongFirebaseConfig = {
+            apiKey: "AIzaSyBxFSpEKq5Fv7vRyHaY7_G9MeoaA-mppNE",
+            authDomain: "thehazard-5f87e.firebaseapp.com",
+            projectId: "thehazard-5f87e",
+            storageBucket: "thehazard-5f87e.firebasestorage.app",
+            messagingSenderId: "364711835242",
+            appId: "1:364711835242:web:320d1b61b48434d8007c13",
+            measurementId: "G-V14MY8KSJK"
+        };
+
+        let currentApp = null;
+        let currentAuth = null;
+
+        function showStatus(message, type = 'success') {
+            const statusDiv = document.getElementById('status');
+            statusDiv.innerHTML = '<div class="' + type + '">' + message + '</div>';
+        }
+
+        function checkCurrentConfig() {
+            try {
+                let message = '<h3>🔍 Current Firebase Configuration:</h3>';
+                
+                if (currentApp && currentApp.options) {
+                    const config = currentApp.options;
+                    message += `
+                        <div class="api-key">
+                            <strong>API Key:</strong> ${config.apiKey}<br>
+                            <strong>Project ID:</strong> ${config.projectId}<br>
+                            <strong>Auth Domain:</strong> ${config.authDomain}<br>
+                            <strong>App ID:</strong> ${config.appId}
+                        </div>
+                    `;
+                    
+                    if (config.apiKey === correctFirebaseConfig.apiKey) {
+                        message += '<div class="success">✅ API Key is CORRECT!</div>';
+                    } else {
+                        message += '<div class="error">❌ API Key is WRONG!</div>';
+                        message += '<div class="warning">⚠️ Using old Firebase project configuration</div>';
+                    }
+                } else {
+                    message += '<div class="warning">⚠️ No Firebase app initialized</div>';
+                }
+                
+                showStatus(message, 'success');
+                
+            } catch (error) {
+                showStatus('❌ Error checking configuration: ' + error.message, 'error');
+            }
+        }
+
+        function testAPIKey() {
+            try {
+                showStatus('🧪 Testing API key...', 'warning');
+                
+                if (!currentAuth) {
+                    showStatus('❌ No Firebase Auth available', 'error');
+                    return;
+                }
+                
+                // Test the API key by trying to get a dummy user
+                currentAuth.signInWithEmailAndPassword('test@test.com', 'test123')
+                    .then(() => {
+                        // This should fail, but if it fails with "user-not-found" then API key works
+                        showStatus('✅ API Key is valid (expected user not found error)', 'success');
+                    })
+                    .catch((error) => {
+                        if (error.code === 'auth/user-not-found') {
+                            showStatus('✅ API Key is valid! (User not found is expected)', 'success');
+                        } else if (error.code === 'auth/api-key-not-valid') {
+                            showStatus('❌ API Key is INVALID: ' + error.message, 'error');
+                        } else {
+                            showStatus('⚠️ API Key test result: ' + error.message, 'warning');
+                        }
+                    });
+                    
+            } catch (error) {
+                showStatus('❌ Error testing API key: ' + error.message, 'error');
+            }
+        }
+
+        function forceCorrectConfig() {
+            try {
+                showStatus('✅ Forcing correct Firebase configuration...', 'warning');
+                
+                // Delete any existing app
+                if (currentApp) {
+                    currentApp.delete();
+                }
+                
+                // Initialize with correct config
+                currentApp = firebase.initializeApp(correctFirebaseConfig);
+                currentAuth = firebase.auth();
+                
+                showStatus(`
+                    <h3>✅ Correct Configuration Applied!</h3>
+                    <div class="api-key">
+                        <strong>API Key:</strong> ${correctFirebaseConfig.apiKey}<br>
+                        <strong>Project ID:</strong> ${correctFirebaseConfig.projectId}<br>
+                        <strong>Auth Domain:</strong> ${correctFirebaseConfig.authDomain}
+                    </div>
+                    <div class="success">
+                        ✅ Firebase initialized with correct configuration!<br>
+                        ✅ API Key: AIzaSyCMz8fLrVUG-ujxt1SSjiN537p_yCMQnPg<br>
+                        ✅ Project: thehazard-75651
+                    </div>
+                `, 'success');
+                
+            } catch (error) {
+                showStatus('❌ Error forcing configuration: ' + error.message, 'error');
+            }
+        }
+
+        // Auto-initialize on page load
+        window.onload = function() {
+            try {
+                currentApp = firebase.initializeApp(correctFirebaseConfig);
+                currentAuth = firebase.auth();
+                showStatus('🔥 Firebase initialized with correct configuration', 'success');
+            } catch (error) {
+                showStatus('❌ Error initializing Firebase: ' + error.message, 'error');
+            }
+        };
+    </script>
+</body>
+</html>

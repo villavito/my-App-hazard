@@ -1,0 +1,212 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Check Ganzib Account</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            max-width: 600px;
+            margin: 50px auto;
+            padding: 20px;
+            background-color: #f5f5f5;
+        }
+        .container {
+            background: white;
+            padding: 30px;
+            border-radius: 10px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+        }
+        button {
+            background-color: #007AFF;
+            color: white;
+            padding: 12px 24px;
+            border: none;
+            border-radius: 5px;
+            cursor: pointer;
+            margin: 10px 0;
+            font-size: 16px;
+        }
+        button:hover {
+            background-color: #0056b3;
+        }
+        .success {
+            background-color: #d4edda;
+            border: 1px solid #c3e6cb;
+            color: #155724;
+            padding: 15px;
+            border-radius: 5px;
+            margin: 20px 0;
+        }
+        .warning {
+            background-color: #fff3cd;
+            border: 1px solid #ffeaa7;
+            color: #856404;
+            padding: 15px;
+            border-radius: 5px;
+            margin: 20px 0;
+        }
+        .error {
+            background-color: #f8d7da;
+            border: 1px solid #f5c6cb;
+            color: #721c24;
+            padding: 15px;
+            border-radius: 5px;
+            margin: 20px 0;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>🔍 Check Ganzib Account Details</h1>
+        
+        <button onclick="checkGanzibAccount()">🔍 Check Ganzib Account</button>
+        <button onclick="updateGanzibPassword()">🔑 Update Password to Ganzib123456!</button>
+        <button onclick="deleteGanzibAccount()">🗑️ Delete Ganzib Account</button>
+        
+        <div id="status"></div>
+    </div>
+
+    <script>
+        function showStatus(message, type = 'success') {
+            const statusDiv = document.getElementById('status');
+            statusDiv.innerHTML = '<div class="' + type + '">' + message + '</div>';
+        }
+
+        function getUsers() {
+            try {
+                const users = localStorage.getItem('hazard_local_users');
+                return users ? JSON.parse(users) : [];
+            } catch (error) {
+                console.error('Error getting users:', error);
+                return [];
+            }
+        }
+
+        function saveUsers(users) {
+            try {
+                localStorage.setItem('hazard_local_users', JSON.stringify(users));
+            } catch (error) {
+                console.error('Error saving users:', error);
+            }
+        }
+
+        function checkGanzibAccount() {
+            try {
+                const users = getUsers();
+                const ganzibUser = users.find(u => u.email === 'ganzibgallardo@gmail.com');
+                
+                if (ganzibUser) {
+                    showStatus(`
+                        ✅ Ganzib account found!<br>
+                        <div class="success">
+                            👤 Name: ${ganzibUser.displayName}<br>
+                            📧 Email: ${ganzibUser.email}<br>
+                            🔑 Password: ${ganzibUser.password}<br>
+                            🔑 Role: ${ganzibUser.role}<br>
+                            🆔 UID: ${ganzibUser.uid}<br>
+                            📅 Created: ${new Date(ganzibUser.createdAt).toLocaleString()}<br>
+                            📅 Last Login: ${new Date(ganzibUser.lastLogin).toLocaleString()}<br>
+                            <br>
+                            <strong>🔑 Use this password to login:</strong><br>
+                            📧 Email: ganzibgallardo@gmail.com<br>
+                            🔑 Password: ${ganzibUser.password}
+                        </div>
+                    `, 'success');
+                } else {
+                    showStatus('❌ Ganzib account not found. Click "Update Password" to create it.', 'error');
+                }
+            } catch (error) {
+                showStatus('Error checking account: ' + error.message, 'error');
+            }
+        }
+
+        function updateGanzibPassword() {
+            try {
+                const users = getUsers();
+                const userIndex = users.findIndex(u => u.email === 'ganzibgallardo@gmail.com');
+                
+                if (userIndex !== -1) {
+                    // Update existing user password
+                    users[userIndex].password = 'Ganzib123456!';
+                    users[userIndex].lastLogin = new Date().toISOString();
+                    saveUsers(users);
+                    
+                    showStatus(`
+                        ✅ Password updated successfully!<br>
+                        <div class="success">
+                            👤 Name: ${users[userIndex].displayName}<br>
+                            📧 Email: ${users[userIndex].email}<br>
+                            🔑 New Password: Ganzib123456!<br>
+                            🔑 Role: ${users[userIndex].role}<br>
+                            <br>
+                            <strong>🎉 You can now login with:</strong><br>
+                            📧 Email: ganzibgallardo@gmail.com<br>
+                            🔑 Password: Ganzib123456!
+                        </div>
+                    `, 'success');
+                } else {
+                    // Create new user
+                    const newGanzibUser = {
+                        uid: 'local_' + Date.now() + '_' + Math.random().toString(36).substr(2, 9),
+                        email: 'ganzibgallardo@gmail.com',
+                        displayName: 'Ganzib Gallardo',
+                        role: 'user',
+                        password: 'Ganzib123456!',
+                        createdAt: new Date().toISOString(),
+                        lastLogin: new Date().toISOString(),
+                        isActive: true,
+                        source: 'password_update'
+                    };
+                    
+                    users.push(newGanzibUser);
+                    saveUsers(users);
+                    
+                    showStatus(`
+                        ✅ Ganzib account created with new password!<br>
+                        <div class="success">
+                            👤 Name: ${newGanzibUser.displayName}<br>
+                            📧 Email: ${newGanzibUser.email}<br>
+                            🔑 Password: Ganzib123456!<br>
+                            🔑 Role: ${newGanzibUser.role}<br>
+                            <br>
+                            <strong>🎉 You can now login with:</strong><br>
+                            📧 Email: ganzibgallardo@gmail.com<br>
+                            🔑 Password: Ganzib123456!
+                        </div>
+                    `, 'success');
+                }
+            } catch (error) {
+                showStatus('Error updating password: ' + error.message, 'error');
+            }
+        }
+
+        function deleteGanzibAccount() {
+            if (confirm('⚠️ Are you sure you want to delete the Ganzib account? You will need to register again.')) {
+                try {
+                    const users = getUsers();
+                    const filteredUsers = users.filter(u => u.email !== 'ganzibgallardo@gmail.com');
+                    saveUsers(filteredUsers);
+                    
+                    showStatus(`
+                        ✅ Ganzib account deleted successfully!<br>
+                        <div class="warning">
+                            You can now register again in the app with:<br>
+                            📧 Email: ganzibgallardo@gmail.com<br>
+                            🔑 Any password you choose (minimum 6 characters)
+                        </div>
+                    `, 'success');
+                } catch (error) {
+                    showStatus('Error deleting account: ' + error.message, 'error');
+                }
+            }
+        }
+
+        // Auto-check on page load
+        window.onload = function() {
+            checkGanzibAccount();
+        };
+    </script>
+</body>
+</html>

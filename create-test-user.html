@@ -1,0 +1,249 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Create Test User</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            max-width: 600px;
+            margin: 50px auto;
+            padding: 20px;
+            background-color: #f5f5f5;
+        }
+        .container {
+            background: white;
+            padding: 30px;
+            border-radius: 10px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+        }
+        .form-group {
+            margin-bottom: 15px;
+        }
+        label {
+            display: block;
+            margin-bottom: 5px;
+            font-weight: bold;
+        }
+        input {
+            width: 100%;
+            padding: 10px;
+            border: 1px solid #ddd;
+            border-radius: 5px;
+            box-sizing: border-box;
+        }
+        button {
+            background-color: #007AFF;
+            color: white;
+            padding: 12px 24px;
+            border: none;
+            border-radius: 5px;
+            cursor: pointer;
+            margin-right: 10px;
+        }
+        button:hover {
+            background-color: #0056b3;
+        }
+        .status {
+            margin-top: 20px;
+            padding: 10px;
+            border-radius: 5px;
+        }
+        .success {
+            background-color: #d4edda;
+            color: #155724;
+            border: 1px solid #c3e6cb;
+        }
+        .error {
+            background-color: #f8d7da;
+            color: #721c24;
+            border: 1px solid #f5c6cb;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>Create Test User</h1>
+        <p>This will create a test user in Firebase Authentication</p>
+        
+        <div class="form-group">
+            <label for="email">Email:</label>
+            <input type="email" id="email" value="test@hazard.com" readonly>
+        </div>
+        
+        <div class="form-group">
+            <label for="password">Password:</label>
+            <input type="password" id="password" value="Test123456!" readonly>
+        </div>
+        
+        <div class="form-group">
+            <label for="displayName">Display Name:</label>
+            <input type="text" id="displayName" value="Test User" readonly>
+        </div>
+        
+        <div class="form-group">
+            <label for="role">Role:</label>
+            <input type="text" id="role" value="user" readonly>
+        </div>
+        
+        <button onclick="createTestUser()">Create Test User</button>
+        <button onclick="createSuperAdmin()">Create Super Admin</button>
+        
+        <div id="status"></div>
+    </div>
+
+    <!-- Firebase SDK -->
+    <script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-app-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-auth-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-firestore-compat.js"></script>
+
+    <script>
+        // Firebase configuration - using working demo project
+        const firebaseConfig = {
+            apiKey: "AIzaSyBxFSpEKq5Fv7vRyHaY7_G9MeoaA-mppNE",
+            authDomain: "thehazard-5f87e.firebaseapp.com",
+            projectId: "thehazard-5f87e",
+            storageBucket: "thehazard-5f87e.firebasestorage.app",
+            messagingSenderId: "364711835242",
+            appId: "1:364711835242:web:320d1b61b48434d8007c13",
+            measurementId: "G-V14MY8KSJK"
+        };
+
+        // Initialize Firebase
+        firebase.initializeApp(firebaseConfig);
+        const auth = firebase.auth();
+        const db = firebase.firestore();
+
+        function showStatus(message, isError = false) {
+            const statusDiv = document.getElementById('status');
+            statusDiv.innerHTML = `<div class="${isError ? 'error' : 'success'}">${message}</div>`;
+        }
+
+        async function createTestUser() {
+            try {
+                showStatus('Creating test user...');
+                
+                const email = document.getElementById('email').value;
+                const password = document.getElementById('password').value;
+                const displayName = document.getElementById('displayName').value;
+                const role = document.getElementById('role').value;
+                
+                console.log('🔥 Starting user creation...');
+                console.log('📧 Email:', email);
+                console.log('🔐 Password:', password);
+                console.log('👤 Name:', displayName);
+                console.log('🔑 Role:', role);
+                
+                // Create user in Firebase Auth
+                console.log('🚀 Creating user in Firebase Auth...');
+                const userCredential = await auth.createUserWithEmailAndPassword(email, password);
+                const user = userCredential.user;
+                
+                console.log('✅ User created in Auth:', user.uid);
+                
+                // Update display name
+                console.log('📝 Updating display name...');
+                await user.updateProfile({ displayName });
+                console.log('✅ Display name updated');
+                
+                // Create user document in Firestore
+                console.log('💾 Creating Firestore document...');
+                const userData = {
+                    uid: user.uid,
+                    email: user.email,
+                    displayName: displayName,
+                    role: role,
+                    createdAt: firebase.firestore.FieldValue.serverTimestamp(),
+                    lastLogin: firebase.firestore.FieldValue.serverTimestamp(),
+                    isActive: true
+                };
+                
+                await db.collection('users').doc(user.uid).set(userData);
+                console.log('✅ Firestore document created');
+                
+                showStatus('✅ Test user created successfully!<br>Email: ' + email + '<br>Password: ' + password + '<br>Role: ' + role + '<br>You can now use these credentials to login.');
+                
+            } catch (error) {
+                console.error('❌ Error creating test user:', error);
+                console.error('Error code:', error.code);
+                console.error('Error message:', error.message);
+                
+                if (error.code === 'auth/email-already-in-use') {
+                    showStatus('✅ Test user already exists! You can use these credentials to login:<br>Email: test@hazard.com<br>Password: Test123456!', false);
+                } else if (error.code === 'auth/invalid-api-key') {
+                    showStatus('❌ Firebase API key is invalid. Please check Firebase configuration.', true);
+                } else if (error.code === 'auth/project-not-found') {
+                    showStatus('❌ Firebase project not found. Please check project ID.', true);
+                } else {
+                    showStatus('❌ Error creating test user:<br>Code: ' + error.code + '<br>Message: ' + error.message, true);
+                }
+            }
+        }
+
+        async function createSuperAdmin() {
+            try {
+                showStatus('Creating Super Admin user...');
+                
+                const email = 'ndrrmc-admin@hazard.gov.ph';
+                const password = 'NDRRMC@Hazard2024!';
+                const displayName = 'NDRRMC Administrator';
+                const role = 'super_admin';
+                
+                console.log('🔥 Starting Super Admin creation...');
+                console.log('📧 Email:', email);
+                console.log('🔐 Password:', password);
+                console.log('👤 Name:', displayName);
+                console.log('🔑 Role:', role);
+                
+                // Create user in Firebase Auth
+                console.log('🚀 Creating Super Admin in Firebase Auth...');
+                const userCredential = await auth.createUserWithEmailAndPassword(email, password);
+                const user = userCredential.user;
+                
+                console.log('✅ Super Admin created in Auth:', user.uid);
+                
+                // Update display name
+                console.log('📝 Updating display name...');
+                await user.updateProfile({ displayName });
+                console.log('✅ Display name updated');
+                
+                // Create user document in Firestore
+                console.log('💾 Creating Firestore document...');
+                const userData = {
+                    uid: user.uid,
+                    email: user.email,
+                    displayName: displayName,
+                    role: role,
+                    agency: 'National Disaster Risk Reduction and Management Council',
+                    agencyCode: 'NDRRMC',
+                    createdAt: firebase.firestore.FieldValue.serverTimestamp(),
+                    lastLogin: firebase.firestore.FieldValue.serverTimestamp(),
+                    isActive: true,
+                    permissions: ['admin_management', 'system_config', 'user_management']
+                };
+                
+                await db.collection('users').doc(user.uid).set(userData);
+                console.log('✅ Firestore document created');
+                
+                showStatus('✅ Super Admin created successfully!<br>Email: ' + email + '<br>Password: ' + password + '<br>You can now use these credentials to login.');
+                
+            } catch (error) {
+                console.error('❌ Error creating Super Admin:', error);
+                console.error('Error code:', error.code);
+                console.error('Error message:', error.message);
+                
+                if (error.code === 'auth/email-already-in-use') {
+                    showStatus('✅ Super Admin already exists! You can use these credentials to login:<br>Email: ndrrmc-admin@hazard.gov.ph<br>Password: NDRRMC@Hazard2024!', false);
+                } else if (error.code === 'auth/invalid-api-key') {
+                    showStatus('❌ Firebase API key is invalid. Please check Firebase configuration.', true);
+                } else if (error.code === 'auth/project-not-found') {
+                    showStatus('❌ Firebase project not found. Please check project ID.', true);
+                } else {
+                    showStatus('❌ Error creating Super Admin:<br>Code: ' + error.code + '<br>Message: ' + error.message, true);
+                }
+            }
+        }
+    </script>
+</body>
+</html>

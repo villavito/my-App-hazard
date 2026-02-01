@@ -6,7 +6,7 @@ import { useAuth } from './AuthContext';
 interface Notification {
   id: string;
   userId: string;
-  type: 'report_approved' | 'report_declined' | 'system';
+  type: 'report_approved' | 'report_declined' | 'system' | 'new_hazard_report';
   title: string;
   message: string;
   read: boolean;
@@ -113,7 +113,7 @@ export const NotificationProvider: React.FC<{ children: React.ReactNode }> = ({ 
 // Helper function to create notifications
 export const createNotification = async (
   userId: string,
-  type: 'report_approved' | 'report_declined' | 'system',
+  type: 'report_approved' | 'report_declined' | 'system' | 'new_hazard_report',
   title: string,
   message: string,
   data?: any
@@ -133,7 +133,47 @@ export const createNotification = async (
     };
     
     await addDoc(notificationsCollection, notification);
+    console.log('Notification created successfully:', { userId, type, title });
   } catch (error) {
     console.error('Error creating notification:', error);
+  }
+};
+
+// Helper function to notify all admins
+export const notifyAdmins = async (
+  type: 'report_approved' | 'report_declined' | 'system' | 'new_hazard_report',
+  title: string,
+  message: string,
+  data?: any
+) => {
+  try {
+    const db = getFirebaseDB();
+    const usersCollection = collection(db, 'users');
+    const usersQuery = query(usersCollection, where('role', 'in', ['admin', 'super_admin']));
+    
+    const snapshot = await getDocs(usersQuery);
+    const notificationsCollection = collection(db, 'notifications');
+    
+    const batch = writeBatch(db);
+    
+    snapshot.docs.forEach(userDoc => {
+      const notification = {
+        userId: userDoc.id,
+        type,
+        title,
+        message,
+        read: false,
+        createdAt: serverTimestamp(),
+        data
+      };
+      
+      const notificationRef = doc(notificationsCollection);
+      batch.set(notificationRef, notification);
+    });
+    
+    await batch.commit();
+    console.log('Admin notifications sent successfully:', { type, title, adminCount: snapshot.size });
+  } catch (error) {
+    console.error('Error notifying admins:', error);
   }
 };

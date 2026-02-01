@@ -1,0 +1,284 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Delete All Admin Accounts</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            max-width: 800px;
+            margin: 50px auto;
+            padding: 20px;
+            background-color: #f5f5f5;
+        }
+        .container {
+            background: white;
+            padding: 30px;
+            border-radius: 10px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+        }
+        .warning {
+            background-color: #f8d7da;
+            border: 1px solid #f5c6cb;
+            color: #721c24;
+            padding: 15px;
+            border-radius: 5px;
+            margin-bottom: 20px;
+        }
+        .info {
+            background-color: #d1ecf1;
+            border: 1px solid #bee5eb;
+            color: #0c5460;
+            padding: 15px;
+            border-radius: 5px;
+            margin-bottom: 20px;
+        }
+        button {
+            background-color: #dc3545;
+            color: white;
+            padding: 12px 24px;
+            border: none;
+            border-radius: 5px;
+            cursor: pointer;
+            margin-right: 10px;
+            margin-bottom: 10px;
+            font-size: 16px;
+        }
+        button:hover {
+            background-color: #c82333;
+        }
+        button.safe {
+            background-color: #007bff;
+        }
+        button.safe:hover {
+            background-color: #0056b3;
+        }
+        .status {
+            margin-top: 20px;
+            padding: 10px;
+            border-radius: 5px;
+        }
+        .success {
+            background-color: #d4edda;
+            color: #155724;
+            border: 1px solid #c3e6cb;
+        }
+        .error {
+            background-color: #f8d7da;
+            color: #721c24;
+            border: 1px solid #f5c6cb;
+        }
+        .account-list {
+            background: #f8f9fa;
+            padding: 15px;
+            border-radius: 8px;
+            margin-bottom: 15px;
+            border-left: 4px solid #dc3545;
+        }
+        .account-item {
+            padding: 8px 0;
+            border-bottom: 1px solid #dee2e6;
+        }
+        .account-item:last-child {
+            border-bottom: none;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>🗑️ Delete All Admin Accounts</h1>
+        
+        <div class="warning">
+            <strong>⚠️ WARNING: This action is permanent!</strong><br>
+            This will delete ALL admin and super admin accounts from your system. You will lose access to the admin dashboard.
+        </div>
+        
+        <div class="info">
+            <strong>ℹ️ This tool will delete:</strong><br>
+            • Super Admin account: ndrrmc-admin@hazard.gov.ph<br>
+            • All other admin accounts<br>
+            • All Firestore user documents with admin roles<br>
+            • Firebase Authentication accounts (if possible)
+        </div>
+        
+        <button onclick="listAdmins()" class="safe">📋 List Current Admins</button>
+        <button onclick="deleteAllAdmins()">🗑️ Delete All Admin Accounts</button>
+        <button onclick="confirmDeletion()">⚠️ Confirm & Delete</button>
+        
+        <div id="status"></div>
+    </div>
+
+    <!-- Firebase SDK -->
+    <script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-app-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-auth-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-firestore-compat.js"></script>
+
+    <script>
+        // Firebase configuration
+        const firebaseConfig = {
+            apiKey: "AIzaSyCMz8fLrVUG-ujxt1SSjiN537p_yCMQnPg",
+            authDomain: "thehazard-75651.firebaseapp.com",
+            databaseURL: "https://thehazard-75651-default-rtdb.asia-southeast1.firebasedatabase.app",
+            projectId: "thehazard-75651",
+            storageBucket: "thehazard-75651.firebasestorage.app",
+            messagingSenderId: "203788333932",
+            appId: "1:203788333932:web:3e4794421129e0f73d3949",
+            measurementId: "G-E3CBCE8VXV"
+        };
+
+        // Initialize Firebase
+        firebase.initializeApp(firebaseConfig);
+        const auth = firebase.auth();
+        const db = firebase.firestore();
+
+        let adminAccounts = [];
+        let deletionConfirmed = false;
+
+        function showStatus(message, isError = false) {
+            const statusDiv = document.getElementById('status');
+            statusDiv.innerHTML = '<div class="' + (isError ? 'error' : 'success') + '">' + message + '</div>';
+        }
+
+        async function listAdmins() {
+            try {
+                showStatus('📋 Listing all admin accounts...');
+                
+                // Get all users with admin roles from Firestore
+                const snapshot = await db.collection('users')
+                    .where('role', 'in', ['admin', 'super_admin'])
+                    .get();
+                
+                adminAccounts = [];
+                let accountList = '<h3>🔍 Found Admin Accounts:</h3><div class="account-list">';
+                
+                if (snapshot.empty) {
+                    accountList += '<p>No admin accounts found.</p>';
+                } else {
+                    snapshot.forEach(doc => {
+                        const user = doc.data();
+                        adminAccounts.push({
+                            uid: doc.id,
+                            email: user.email,
+                            displayName: user.displayName,
+                            role: user.role,
+                            agency: user.agency || 'Not specified'
+                        });
+                        
+                        accountList += `
+                            <div class="account-item">
+                                <strong>👤 ${user.displayName}</strong><br>
+                                📧 Email: ${user.email}<br>
+                                🔑 Role: ${user.role}<br>
+                                🏢 Agency: ${user.agency || 'Not specified'}<br>
+                                🆔 UID: ${doc.id}
+                            </div>
+                        `;
+                    });
+                }
+                
+                accountList += '</div>';
+                accountList += `<p><strong>Total admin accounts found: ${adminAccounts.length}</strong></p>`;
+                
+                showStatus(accountList, false);
+                
+            } catch (error) {
+                console.error('❌ Error listing admins:', error);
+                showStatus('❌ Error listing admin accounts: ' + error.message, true);
+            }
+        }
+
+        async function deleteAllAdmins() {
+            if (adminAccounts.length === 0) {
+                await listAdmins();
+                if (adminAccounts.length === 0) {
+                    showStatus('ℹ️ No admin accounts to delete.', false);
+                    return;
+                }
+            }
+            
+            showStatus('⚠️ Ready to delete ' + adminAccounts.length + ' admin accounts.<br><strong>Click "Confirm & Delete" to proceed.</strong>', true);
+            deletionConfirmed = false;
+        }
+
+        async function confirmDeletion() {
+            if (!deletionConfirmed) {
+                if (adminAccounts.length === 0) {
+                    await listAdmins();
+                }
+                
+                if (adminAccounts.length === 0) {
+                    showStatus('ℹ️ No admin accounts to delete.', false);
+                    return;
+                }
+                
+                const confirmMessage = `⚠️ FINAL WARNING: You are about to delete ${adminAccounts.length} admin accounts permanently!\n\nThis includes:\n${adminAccounts.map(acc => `- ${acc.email} (${acc.role})`).join('\n')}\n\nThis action cannot be undone. Type 'DELETE' to confirm:`;
+                
+                const confirmation = prompt(confirmMessage);
+                if (confirmation !== 'DELETE') {
+                    showStatus('❌ Deletion cancelled. Confirmation not received.', true);
+                    return;
+                }
+            }
+            
+            try {
+                showStatus('🗑️ Deleting all admin accounts...');
+                
+                let deletedCount = 0;
+                let errors = [];
+                
+                for (const admin of adminAccounts) {
+                    try {
+                        // Delete from Firestore
+                        await db.collection('users').doc(admin.uid).delete();
+                        console.log('✅ Deleted Firestore document:', admin.uid);
+                        
+                        // Note: Firebase Auth deletion requires Admin SDK
+                        // We can only delete Firestore documents from client side
+                        deletedCount++;
+                        
+                    } catch (error) {
+                        console.error('❌ Error deleting admin:', admin.email, error);
+                        errors.push(`${admin.email}: ${error.message}`);
+                    }
+                }
+                
+                let resultMessage = `<h3>✅ Deletion Complete!</h3>`;
+                resultMessage += `<p><strong>Successfully deleted: ${deletedCount} admin accounts</strong></p>`;
+                
+                if (errors.length > 0) {
+                    resultMessage += `<p><strong>Errors encountered:</strong></p><ul>`;
+                    errors.forEach(error => {
+                        resultMessage += `<li>${error}</li>`;
+                    });
+                    resultMessage += `</ul>`;
+                    resultMessage += `<p><em>Note: Firebase Auth accounts may require manual deletion from Firebase Console.</em></p>`;
+                }
+                
+                resultMessage += `<p><strong>⚠️ Important:</strong></p>`;
+                resultMessage += `<ul>`;
+                resultMessage += `<li>You have been logged out of admin access</li>`;
+                resultMessage += `<li>Admin dashboard is no longer accessible</li>`;
+                resultMessage += `<li>All admin permissions have been revoked</li>`;
+                resultMessage += `<li>System now has no administrators</li>`;
+                resultMessage += `</ul>`;
+                
+                showStatus(resultMessage, false);
+                
+                // Clear the admin accounts list
+                adminAccounts = [];
+                deletionConfirmed = true;
+                
+            } catch (error) {
+                console.error('❌ Error during deletion:', error);
+                showStatus('❌ Error during admin deletion: ' + error.message, true);
+            }
+        }
+
+        // Auto-list admins on page load
+        window.onload = function() {
+            listAdmins();
+        };
+    </script>
+</body>
+</html>

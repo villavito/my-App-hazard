@@ -3,7 +3,7 @@ import { useRouter } from 'expo-router';
 import { useEffect, useState } from 'react';
 import { ActivityIndicator, Alert, FlatList, Image, Modal, StyleSheet, Text, TextInput, TouchableOpacity, useColorScheme, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { useAuth } from '../contexts/AuthContext';
+import { useAuth } from '../../contexts/AuthContext';
 
 interface IncidentReport {
   id: string;
@@ -16,83 +16,49 @@ interface IncidentReport {
   image: string | null;
   location: { latitude: number; longitude: number } | null;
   timestamp: string;
-  status: 'pending' | 'reviewed' | 'resolved' | 'declined';
+  status: 'pending' | 'reviewed' | 'resolved';
   adminNotes: string | null;
 }
 
-export default function MyReportsScreen() {
+export default function PendingReportsScreen() {
   const colorScheme = useColorScheme();
   const isDark = colorScheme === 'dark';
   const router = useRouter();
   const { user } = useAuth();
   const [reports, setReports] = useState<IncidentReport[]>([]);
   const [loading, setLoading] = useState(true);
-  const [showReachAdminModal, setShowReachAdminModal] = useState(false);
-  const [showDeleteModal, setShowDeleteModal] = useState(false);
+  const [showReachUserModal, setShowReachUserModal] = useState(false);
   const [selectedReport, setSelectedReport] = useState<IncidentReport | null>(null);
   const [notificationMessage, setNotificationMessage] = useState('');
 
-  // Check if user is admin or super admin
-  const isAdminOrSuperAdmin = user?.role === 'admin' || user?.role === 'super_admin';
-
   useEffect(() => {
-    loadUserReports();
+    loadPendingReports();
   }, []);
 
-  const loadUserReports = () => {
+  const loadPendingReports = () => {
     try {
       setLoading(true);
       
       // Get all reports from localStorage
       const allReports = JSON.parse(localStorage.getItem('incident_reports') || '[]');
       
-      // Filter reports for current user
-      const userReports = allReports.filter((report: IncidentReport) => 
-        report.user.uid === user?.uid
+      // Filter only pending reports
+      const pendingReports = allReports.filter((report: IncidentReport) => 
+        report.status === 'pending'
       );
       
       // Sort by timestamp (newest first)
-      userReports.sort((a: IncidentReport, b: IncidentReport) => 
+      pendingReports.sort((a: IncidentReport, b: IncidentReport) => 
         new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime()
       );
       
-      setReports(userReports);
-      console.log(`📋 Loaded ${userReports.length} reports for user: ${user?.displayName}`);
+      setReports(pendingReports);
+      console.log(`📋 Loaded ${pendingReports.length} pending reports`);
     } catch (error) {
-      console.error('❌ Error loading user reports:', error);
-      Alert.alert('Error', 'Failed to load your reports');
+      console.error('❌ Error loading pending reports:', error);
+      Alert.alert('Error', 'Failed to load pending reports');
     } finally {
       setLoading(false);
-    }
-  };
-
-  const getStatusColor = (status: string) => {
-    switch (status) {
-      case 'pending':
-        return '#FF9500';
-      case 'reviewed':
-        return '#007AFF';
-      case 'resolved':
-        return '#34C759';
-      case 'declined':
-        return '#FF3B30';
-      default:
-        return '#8E8E93';
-    }
-  };
-
-  const getStatusText = (status: string) => {
-    switch (status) {
-      case 'pending':
-        return 'Pending Review';
-      case 'reviewed':
-        return 'Under Review';
-      case 'resolved':
-        return 'Resolved';
-      case 'declined':
-        return 'Declined';
-      default:
-        return 'Unknown';
     }
   };
 
@@ -107,75 +73,33 @@ export default function MyReportsScreen() {
     });
   };
 
-  const handleReachAdmin = (report: IncidentReport) => {
+  const handleReachUser = (report: IncidentReport) => {
     setSelectedReport(report);
     setNotificationMessage(`Hi ${report.user.name}, I'm reviewing your incident report submitted on ${formatDate(report.timestamp)}. I wanted to reach out personally about this matter. Thank you for bringing this to our attention. ❤️`);
-    setShowReachAdminModal(true);
+    setShowReachUserModal(true);
   };
 
-  const handleDeleteReport = (report: IncidentReport) => {
-    console.log('🗑️ Delete button pressed for report:', report.id);
-    setSelectedReport(report);
-    setShowDeleteModal(true);
-  };
-
-  const confirmDelete = () => {
-    if (!selectedReport) return;
-    
-    console.log('🗑️ Proceeding with delete for report:', selectedReport.id);
-    try {
-      // Get all reports from localStorage
-      const allReports = JSON.parse(localStorage.getItem('incident_reports') || '[]');
-      console.log('📋 Current reports count:', allReports.length);
-      
-      // Filter out the report to be deleted
-      const updatedReports = allReports.filter((r: IncidentReport) => r.id !== selectedReport.id);
-      console.log('📋 Updated reports count:', updatedReports.length);
-      
-      // Save back to localStorage
-      localStorage.setItem('incident_reports', JSON.stringify(updatedReports));
-      console.log('💾 Report removed from localStorage');
-      
-      // Update local state
-      const userReports = updatedReports.filter((r: IncidentReport) => r.user.uid === user?.uid);
-      setReports(userReports);
-      console.log('🔄 Updated local state with', userReports.length, 'reports');
-      
-      // Close modal and show success
-      setShowDeleteModal(false);
-      setSelectedReport(null);
-      
-      // Show success message
-      setTimeout(() => {
-        Alert.alert('Success', 'Report deleted successfully!');
-      }, 100);
-      
-    } catch (error: any) {
-      console.error('❌ Error deleting report:', error);
-      Alert.alert('Error', 'Failed to delete report. Please try again.');
-    }
-  };
-
-  const sendNotificationToAdmin = () => {
+  const sendNotificationToUser = () => {
     if (!selectedReport || !notificationMessage.trim()) {
-      Alert.alert('Error', 'Please enter a message for the admin');
+      Alert.alert('Error', 'Please enter a message for the user');
       return;
     }
 
     try {
-      // Get existing admin notifications
-      const existingNotifications = JSON.parse(localStorage.getItem('admin_notifications') || '[]');
+      // Get existing user notifications
+      const existingNotifications = JSON.parse(localStorage.getItem('user_notifications') || '[]');
       
       // Create new notification
       const newNotification = {
         id: 'notification_' + Date.now() + '_' + Math.random().toString(36).substr(2, 9),
-        type: 'user_follow_up',
+        type: 'admin_reach_out',
         reportId: selectedReport.id,
-        fromUser: {
-          name: user?.displayName || 'Anonymous User',
+        fromAdmin: {
+          name: user?.displayName || 'Admin',
           email: user?.email || 'No email',
           uid: user?.uid || 'unknown'
         },
+        toUser: selectedReport.user,
         message: notificationMessage.trim(),
         timestamp: new Date().toISOString(),
         status: 'unread',
@@ -190,24 +114,82 @@ export default function MyReportsScreen() {
       existingNotifications.push(newNotification);
       
       // Save to localStorage
-      localStorage.setItem('admin_notifications', JSON.stringify(existingNotifications));
+      localStorage.setItem('user_notifications', JSON.stringify(existingNotifications));
       
-      console.log('✅ Notification sent to admin:', newNotification.id);
+      console.log('✅ Notification sent to user:', newNotification.id);
 
       Alert.alert(
-        '✅ Notification Sent!',
-        'Your message has been sent to the admin. They will review your report and respond soon.',
+        '✅ Message Sent!',
+        `Your message has been sent to ${selectedReport.user.name}. They will receive your notification.`,
         [{ text: 'OK' }]
       );
 
       // Close modal and reset
-      setShowReachAdminModal(false);
+      setShowReachUserModal(false);
       setSelectedReport(null);
       setNotificationMessage('');
       
     } catch (error: any) {
       console.error('❌ Error sending notification:', error);
       Alert.alert('Error', 'Failed to send notification. Please try again.');
+    }
+  };
+
+  const handleApprove = async (reportId: string) => {
+    try {
+      // Get all reports from localStorage
+      const allReports = JSON.parse(localStorage.getItem('incident_reports') || '[]');
+      
+      // Find and update the report
+      const reportIndex = allReports.findIndex((r: IncidentReport) => r.id === reportId);
+      if (reportIndex !== -1) {
+        allReports[reportIndex] = {
+          ...allReports[reportIndex],
+          status: 'reviewed' as const,
+          adminNotes: 'Approved by admin'
+        };
+        
+        // Save back to localStorage
+        localStorage.setItem('incident_reports', JSON.stringify(allReports));
+        
+        console.log('✅ Report approved:', reportId);
+        Alert.alert('Success', 'Report approved successfully');
+        loadPendingReports(); // Refresh the list
+      } else {
+        Alert.alert('Error', 'Report not found');
+      }
+    } catch (error) {
+      console.error('Error approving report:', error);
+      Alert.alert('Error', 'Failed to approve report');
+    }
+  };
+
+  const handleDecline = async (reportId: string) => {
+    try {
+      // Get all reports from localStorage
+      const allReports = JSON.parse(localStorage.getItem('incident_reports') || '[]');
+      
+      // Find and update the report
+      const reportIndex = allReports.findIndex((r: IncidentReport) => r.id === reportId);
+      if (reportIndex !== -1) {
+        allReports[reportIndex] = {
+          ...allReports[reportIndex],
+          status: 'declined' as const,
+          adminNotes: 'Declined by admin'
+        };
+        
+        // Save back to localStorage
+        localStorage.setItem('incident_reports', JSON.stringify(allReports));
+        
+        console.log('✅ Report declined:', reportId);
+        Alert.alert('Success', 'Report declined successfully');
+        loadPendingReports(); // Refresh the list
+      } else {
+        Alert.alert('Error', 'Report not found');
+      }
+    } catch (error) {
+      console.error('Error declining report:', error);
+      Alert.alert('Error', 'Failed to decline report');
     }
   };
 
@@ -222,12 +204,22 @@ export default function MyReportsScreen() {
             {formatDate(item.timestamp)}
           </Text>
         </View>
-        <View style={[styles.statusBadge, { backgroundColor: getStatusColor(item.status) }]}>
-          <Text style={styles.statusText}>{getStatusText(item.status)}</Text>
+        <View style={[styles.statusBadge, { backgroundColor: '#FF9500' }]}>
+          <Text style={styles.statusText}>Pending</Text>
         </View>
       </View>
 
       <View style={styles.reportContent}>
+        <View style={styles.userInfo}>
+          <Ionicons name="person-outline" size={16} color={isDark ? '#888' : '#666'} />
+          <Text style={[styles.userName, { color: isDark ? '#fff' : '#000' }]}>
+            {item.user.name}
+          </Text>
+          <Text style={[styles.userEmail, { color: isDark ? '#888' : '#666' }]}>
+            {item.user.email}
+          </Text>
+        </View>
+
         <Text style={[styles.description, { color: isDark ? '#fff' : '#000' }]}>
           {item.description}
         </Text>
@@ -244,47 +236,27 @@ export default function MyReportsScreen() {
             </Text>
           </View>
         )}
-        
-        {item.adminNotes && (
-          <View style={styles.adminNotes}>
-            <Text style={[styles.adminNotesLabel, { color: isDark ? '#888' : '#666' }]}>
-              Admin Notes:
-            </Text>
-            <Text style={[styles.adminNotesText, { color: isDark ? '#fff' : '#000' }]}>
-              {item.adminNotes}
-            </Text>
-          </View>
-        )}
-        
-        {item.status === 'pending' && isAdminOrSuperAdmin && (
-          <TouchableOpacity 
-            style={styles.reachAdminButton} 
-            onPress={() => handleReachAdmin(item)}
-          >
-            <Ionicons name="heart" size={20} color="#fff" />
-            <Text style={styles.reachAdminButtonText}>Reach Admin</Text>
-          </TouchableOpacity>
-        )}
-        
+      </View>
+
+      {/* Action Buttons */}
+      <View style={styles.actionButtons}>
         <TouchableOpacity 
-          style={styles.deleteButton} 
-          onPress={() => {
-            console.log('🗑️ Delete button pressed!');
-            console.log('🗑️ Report data:', item);
-            console.log('🗑️ Report ID:', item.id);
-            console.log('🗑️ About to call handleDeleteReport');
-            
-            try {
-              handleDeleteReport(item);
-              console.log('🗑️ handleDeleteReport called successfully');
-            } catch (error) {
-              console.error('🗑️ Error calling handleDeleteReport:', error);
-              Alert.alert('Error', 'Delete function failed: ' + error.message);
-            }
-          }}
+          style={[styles.actionButton, styles.approveButton]} 
+          onPress={() => handleApprove(item.id)}
         >
-          <Ionicons name="trash-outline" size={16} color="#FF3B30" />
-          <Text style={styles.deleteButtonText}>Delete</Text>
+          <Text style={styles.actionButtonText}>✅ Approve</Text>
+        </TouchableOpacity>
+        <TouchableOpacity 
+          style={[styles.actionButton, styles.declineButton]} 
+          onPress={() => handleDecline(item.id)}
+        >
+          <Text style={styles.actionButtonText}>❌ Decline</Text>
+        </TouchableOpacity>
+        <TouchableOpacity 
+          style={[styles.actionButton, styles.heartButton]} 
+          onPress={() => handleReachUser(item)}
+        >
+          <Text style={styles.actionButtonText}>❤️ Reach User</Text>
         </TouchableOpacity>
       </View>
     </View>
@@ -362,6 +334,20 @@ export default function MyReportsScreen() {
     },
     reportContent: {
       gap: 12,
+      marginBottom: 12,
+    },
+    userInfo: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: 8,
+    },
+    userName: {
+      fontSize: 16,
+      fontWeight: '600',
+      marginRight: 8,
+    },
+    userEmail: {
+      fontSize: 14,
     },
     description: {
       fontSize: 16,
@@ -381,71 +367,27 @@ export default function MyReportsScreen() {
     locationText: {
       fontSize: 14,
     },
-    adminNotes: {
-      padding: 12,
-      backgroundColor: isDark ? '#1a1a1a' : '#f8f9fa',
-      borderRadius: 8,
-      borderLeftWidth: 3,
-      borderLeftColor: '#007AFF',
-    },
-    adminNotesLabel: {
-      fontSize: 12,
-      fontWeight: '600',
-      marginBottom: 4,
-    },
-    adminNotesText: {
-      fontSize: 14,
-      lineHeight: 20,
-    },
-    emptyContainer: {
-      flex: 1,
-      justifyContent: 'center',
-      alignItems: 'center',
-      paddingVertical: 60,
-    },
-    emptyIcon: {
-      marginBottom: 16,
-    },
-    emptyTitle: {
-      fontSize: 20,
-      fontWeight: '600',
-      color: isDark ? '#fff' : '#000',
-      marginBottom: 8,
-    },
-    emptyDescription: {
-      fontSize: 16,
-      color: isDark ? '#888' : '#666',
-      textAlign: 'center',
-      marginBottom: 24,
-    },
-    submitButton: {
-      backgroundColor: '#007AFF',
-      paddingVertical: 12,
-      paddingHorizontal: 24,
-      borderRadius: 8,
-    },
-    submitButtonText: {
-      color: '#fff',
-      fontSize: 16,
-      fontWeight: '600',
-    },
-    loadingContainer: {
-      flex: 1,
-      justifyContent: 'center',
-      alignItems: 'center',
-    },
-    reachAdminButton: {
+    actionButtons: {
       flexDirection: 'row',
-      alignItems: 'center',
-      justifyContent: 'center',
-      backgroundColor: '#FF3B5C',
+      gap: 8,
+    },
+    actionButton: {
+      flex: 1,
       paddingVertical: 12,
       paddingHorizontal: 16,
       borderRadius: 8,
-      marginTop: 12,
-      gap: 8,
+      alignItems: 'center',
     },
-    reachAdminButtonText: {
+    approveButton: {
+      backgroundColor: '#34C759',
+    },
+    declineButton: {
+      backgroundColor: '#FF3B30',
+    },
+    heartButton: {
+      backgroundColor: '#FF3B5C',
+    },
+    actionButtonText: {
       color: '#fff',
       fontSize: 16,
       fontWeight: '600',
@@ -527,40 +469,30 @@ export default function MyReportsScreen() {
       fontWeight: '600',
       textAlign: 'center',
     },
-    deleteButton: {
-      flexDirection: 'row',
-      alignItems: 'center',
+    emptyContainer: {
+      flex: 1,
       justifyContent: 'center',
-      backgroundColor: isDark ? '#2a2a2a' : '#fff',
-      borderWidth: 1,
-      borderColor: '#FF3B30',
-      borderRadius: 6,
-      paddingVertical: 8,
-      paddingHorizontal: 12,
-      marginTop: 12,
+      alignItems: 'center',
+      paddingVertical: 60,
     },
-    deleteButtonText: {
-      color: '#FF3B30',
-      fontSize: 14,
+    emptyIcon: {
+      marginBottom: 16,
+    },
+    emptyTitle: {
+      fontSize: 20,
       fontWeight: '600',
-      marginLeft: 6,
-    },
-    reportInfo: {
-      fontSize: 14,
-      color: isDark ? '#888' : '#666',
+      color: isDark ? '#fff' : '#000',
       marginBottom: 8,
     },
-    deleteModalButton: {
-      flex: 1,
-      backgroundColor: '#FF3B30',
-      paddingVertical: 12,
-      borderRadius: 8,
-    },
-    deleteModalButtonText: {
-      color: '#fff',
+    emptyDescription: {
       fontSize: 16,
-      fontWeight: '600',
+      color: isDark ? '#888' : '#666',
       textAlign: 'center',
+    },
+    loadingContainer: {
+      flex: 1,
+      justifyContent: 'center',
+      alignItems: 'center',
     },
   });
 
@@ -570,7 +502,7 @@ export default function MyReportsScreen() {
         <View style={styles.loadingContainer}>
           <ActivityIndicator size="large" color="#007AFF" />
           <Text style={[{ color: isDark ? '#fff' : '#000', marginTop: 16 }]}>
-            Loading your reports...
+            Loading pending reports...
           </Text>
         </View>
       </SafeAreaView>
@@ -581,7 +513,10 @@ export default function MyReportsScreen() {
     <SafeAreaView style={styles.container}>
       <View style={styles.header}>
         <View style={styles.headerContent}>
-          <Text style={styles.title}>My Reports</Text>
+          <TouchableOpacity style={styles.backButton} onPress={() => router.back()}>
+            <Ionicons name="arrow-back" size={24} color={isDark ? '#fff' : '#000'} />
+          </TouchableOpacity>
+          <Text style={styles.title}>Pending Reports</Text>
           <View style={styles.backButton} />
         </View>
       </View>
@@ -590,21 +525,15 @@ export default function MyReportsScreen() {
         {reports.length === 0 ? (
           <View style={styles.emptyContainer}>
             <Ionicons 
-              name="document-text-outline" 
+              name="checkmark-circle-outline" 
               size={64} 
               color={isDark ? '#444' : '#ccc'} 
               style={styles.emptyIcon}
             />
-            <Text style={styles.emptyTitle}>No Reports Yet</Text>
+            <Text style={styles.emptyTitle}>No Pending Reports</Text>
             <Text style={styles.emptyDescription}>
-              You haven't submitted any incident reports yet. Start by reporting an incident to see it here.
+              Great! All reports have been reviewed. No pending reports to process.
             </Text>
-            <TouchableOpacity 
-              style={styles.submitButton} 
-              onPress={() => router.push('/capture-hazard')}
-            >
-              <Text style={styles.submitButtonText}>Submit First Report</Text>
-            </TouchableOpacity>
           </View>
         ) : (
           <FlatList
@@ -617,27 +546,27 @@ export default function MyReportsScreen() {
         )}
       </View>
 
-      {/* Reach Admin Modal */}
+      {/* Reach User Modal */}
       <Modal
-        visible={showReachAdminModal}
+        visible={showReachUserModal}
         transparent={true}
         animationType="slide"
-        onRequestClose={() => setShowReachAdminModal(false)}
+        onRequestClose={() => setShowReachUserModal(false)}
       >
         <View style={styles.modalOverlay}>
           <View style={styles.modalContent}>
             <View style={styles.modalHeader}>
-              <Text style={styles.modalTitle}>❤️ Reach Admin</Text>
+              <Text style={styles.modalTitle}>❤️ Reach User</Text>
               <TouchableOpacity 
                 style={styles.modalCloseButton} 
-                onPress={() => setShowReachAdminModal(false)}
+                onPress={() => setShowReachUserModal(false)}
               >
                 <Ionicons name="close" size={24} color={isDark ? '#fff' : '#000'} />
               </TouchableOpacity>
             </View>
 
             <Text style={styles.modalDescription}>
-              Send a heartfelt message to the admin about this pending report. Your care and attention will help ensure this incident gets reviewed promptly.
+              Send a heartfelt message to the user about their pending report. They'll receive your personal message and know you're reviewing their incident.
             </Text>
 
             <Text style={[{ color: isDark ? '#fff' : '#000', marginBottom: 8, fontWeight: '600' }]}>
@@ -647,7 +576,7 @@ export default function MyReportsScreen() {
               style={styles.textInput}
               value={notificationMessage}
               onChangeText={setNotificationMessage}
-              placeholder="Type your message to the admin..."
+              placeholder="Type your message to the user..."
               placeholderTextColor={isDark ? '#888' : '#999'}
               multiline
             />
@@ -655,66 +584,15 @@ export default function MyReportsScreen() {
             <View style={styles.modalButtons}>
               <TouchableOpacity 
                 style={styles.cancelButton} 
-                onPress={() => setShowReachAdminModal(false)}
+                onPress={() => setShowReachUserModal(false)}
               >
                 <Text style={styles.cancelButtonText}>Cancel</Text>
               </TouchableOpacity>
               <TouchableOpacity 
                 style={styles.sendButton} 
-                onPress={sendNotificationToAdmin}
+                onPress={sendNotificationToUser}
               >
                 <Text style={styles.sendButtonText}>Send Message</Text>
-              </TouchableOpacity>
-            </View>
-          </View>
-        </View>
-      </Modal>
-
-      {/* Delete Confirmation Modal */}
-      <Modal
-        visible={showDeleteModal}
-        transparent={true}
-        animationType="slide"
-        onRequestClose={() => setShowDeleteModal(false)}
-      >
-        <View style={styles.modalOverlay}>
-          <View style={styles.modalContent}>
-            <View style={styles.modalHeader}>
-              <Text style={styles.modalTitle}>🗑️ Delete Report</Text>
-              <TouchableOpacity 
-                style={styles.modalCloseButton} 
-                onPress={() => setShowDeleteModal(false)}
-              >
-                <Ionicons name="close" size={24} color={isDark ? '#fff' : '#000'} />
-              </TouchableOpacity>
-            </View>
-
-            <Text style={styles.modalDescription}>
-              Are you sure you want to delete this report? This action cannot be undone and the report will be permanently removed.
-            </Text>
-
-            <Text style={[styles.reportInfo, { marginBottom: 20 }]}>
-              Report ID: {selectedReport?.id}
-            </Text>
-            <Text style={[styles.reportInfo, { marginBottom: 20 }]}>
-              Submitted by: {selectedReport?.user.name}
-            </Text>
-            <Text style={[styles.reportInfo, { marginBottom: 20 }]}>
-              Date: {selectedReport ? formatDate(selectedReport.timestamp) : ''}
-            </Text>
-
-            <View style={styles.modalButtons}>
-              <TouchableOpacity 
-                style={styles.cancelButton} 
-                onPress={() => setShowDeleteModal(false)}
-              >
-                <Text style={styles.cancelButtonText}>Cancel</Text>
-              </TouchableOpacity>
-              <TouchableOpacity 
-                style={styles.deleteModalButton} 
-                onPress={confirmDelete}
-              >
-                <Text style={styles.deleteModalButtonText}>Delete Forever</Text>
               </TouchableOpacity>
             </View>
           </View>

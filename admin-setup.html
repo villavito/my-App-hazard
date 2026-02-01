@@ -1,0 +1,311 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Hazard App - Admin Account Setup</title>
+    <script src="https://www.gstatic.com/firebasejs/9.6.1/firebase-app-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/9.6.1/firebase-auth-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/9.6.1/firebase-firestore-compat.js"></script>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            max-width: 800px;
+            margin: 0 auto;
+            padding: 20px;
+            background-color: #f5f5f5;
+        }
+        .container {
+            background: white;
+            padding: 30px;
+            border-radius: 10px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+        }
+        h1 {
+            color: #007AFF;
+            text-align: center;
+            margin-bottom: 30px;
+        }
+        .account-card {
+            border: 1px solid #ddd;
+            border-radius: 8px;
+            padding: 20px;
+            margin-bottom: 20px;
+            background: #f9f9f9;
+        }
+        .account-type {
+            font-weight: bold;
+            color: #333;
+            margin-bottom: 10px;
+            font-size: 18px;
+        }
+        .super-admin {
+            border-left: 4px solid #FF3B30;
+            background: #fff5f5;
+        }
+        .admin {
+            border-left: 4px solid #007AFF;
+            background: #f0f8ff;
+        }
+        .details {
+            font-size: 14px;
+            color: #666;
+            line-height: 1.5;
+        }
+        .credentials {
+            background: #e8f4fd;
+            padding: 15px;
+            border-radius: 5px;
+            margin-top: 10px;
+            font-family: monospace;
+        }
+        .btn {
+            background: #007AFF;
+            color: white;
+            padding: 10px 20px;
+            border: none;
+            border-radius: 5px;
+            cursor: pointer;
+            margin: 5px;
+        }
+        .btn:hover {
+            background: #0056b3;
+        }
+        .btn-danger {
+            background: #FF3B30;
+        }
+        .btn-danger:hover {
+            background: #d32f2f;
+        }
+        .status {
+            padding: 10px;
+            border-radius: 5px;
+            margin-top: 10px;
+            font-weight: bold;
+        }
+        .success {
+            background: #d4edda;
+            color: #155724;
+            border: 1px solid #c3e6cb;
+        }
+        .error {
+            background: #f8d7da;
+            color: #721c24;
+            border: 1px solid #f5c6cb;
+        }
+        .info {
+            background: #d1ecf1;
+            color: #0c5460;
+            border: 1px solid #bee5eb;
+            padding: 15px;
+            border-radius: 5px;
+            margin-bottom: 20px;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>🚨 Hazard App - Admin Account Setup</h1>
+        
+        <div class="info">
+            <strong>📋 Instructions:</strong><br>
+            1. Click the "Create Account" button for each admin account<br>
+            2. Use the provided credentials to log in to the Hazard App<br>
+            3. Each account has specific permissions based on their role
+        </div>
+
+        <div id="status"></div>
+
+        <!-- Super Admin Account -->
+        <div class="account-card super-admin">
+            <div class="account-type">👑 SUPER ADMIN - NDRRMC</div>
+            <div class="details">
+                <strong>Agency:</strong> National Disaster Risk Reduction and Management Council<br>
+                <strong>Role:</strong> Super Administrator<br>
+                <strong>Permissions:</strong> Full system access, user management, system configuration
+            </div>
+            <div class="credentials">
+                Email: ndrrmc-admin@hazard.gov.ph<br>
+                Password: NDRRMC@Hazard2024!
+            </div>
+            <button class="btn btn-danger" onclick="createAccount('ndrrmc-admin@hazard.gov.ph', 'NDRRMC@Hazard2024!', 'NDRRMC Administrator', 'super_admin', 'National Disaster Risk Reduction and Management Council', 'NDRRMC')">
+                Create NDRRMC Account
+            </button>
+        </div>
+
+        <!-- Regular Admin Accounts -->
+        <div class="account-card admin">
+            <div class="account-type">🛡️ ADMIN - OCD</div>
+            <div class="details">
+                <strong>Agency:</strong> Office of Civil Defense<br>
+                <strong>Role:</strong> Administrator<br>
+                <strong>Permissions:</strong> Hazard reports management, analytics
+            </div>
+            <div class="credentials">
+                Email: ocd-admin@hazard.gov.ph<br>
+                Password: OCD@Hazard2024!
+            </div>
+            <button class="btn" onclick="createAccount('ocd-admin@hazard.gov.ph', 'OCD@Hazard2024!', 'OCD Administrator', 'admin', 'Office of Civil Defense', 'OCD')">
+                Create OCD Account
+            </button>
+        </div>
+
+        <div class="account-card admin">
+            <div class="account-type">👨‍👩‍👧‍👦 ADMIN - DSWD</div>
+            <div class="details">
+                <strong>Agency:</strong> Department of Social Welfare and Development<br>
+                <strong>Role:</strong> Administrator<br>
+                <strong>Permissions:</strong> Hazard reports management, analytics
+            </div>
+            <div class="credentials">
+                Email: dswd-admin@hazard.gov.ph<br>
+                Password: DSWD@Hazard2024!
+            </div>
+            <button class="btn" onclick="createAccount('dswd-admin@hazard.gov.ph', 'DSWD@Hazard2024!', 'DSWD Administrator', 'admin', 'Department of Social Welfare and Development', 'DSWD')">
+                Create DSWD Account
+            </button>
+        </div>
+
+        <div class="account-card admin">
+            <div class="account-type">🚒 ADMIN - BFP</div>
+            <div class="details">
+                <strong>Agency:</strong> Bureau of Fire Protection<br>
+                <strong>Role:</strong> Administrator<br>
+                <strong>Permissions:</strong> Hazard reports management, analytics
+            </div>
+            <div class="credentials">
+                Email: bfp-admin@hazard.gov.ph<br>
+                Password: BFP@Hazard2024!
+            </div>
+            <button class="btn" onclick="createAccount('bfp-admin@hazard.gov.ph', 'BFP@Hazard2024!', 'BFP Administrator', 'admin', 'Bureau of Fire Protection', 'BFP')">
+                Create BFP Account
+            </button>
+        </div>
+
+        <div class="account-card admin">
+            <div class="account-type">👮 ADMIN - PNP</div>
+            <div class="details">
+                <strong>Agency:</strong> Philippine National Police<br>
+                <strong>Role:</strong> Administrator<br>
+                <strong>Permissions:</strong> Hazard reports management, analytics
+            </div>
+            <div class="credentials">
+                Email: pnp-admin@hazard.gov.ph<br>
+                Password: PNP@Hazard2024!
+            </div>
+            <button class="btn" onclick="createAccount('pnp-admin@hazard.gov.ph', 'PNP@Hazard2024!', 'PNP Administrator', 'admin', 'Philippine National Police', 'PNP')">
+                Create PNP Account
+            </button>
+        </div>
+
+        <div class="account-card admin">
+            <div class="account-type">🏥 ADMIN - RED CROSS</div>
+            <div class="details">
+                <strong>Agency:</strong> Philippine Red Cross<br>
+                <strong>Role:</strong> Administrator<br>
+                <strong>Permissions:</strong> Hazard reports management, analytics
+            </div>
+            <div class="credentials">
+                Email: redcross-admin@hazard.gov.ph<br>
+                Password: RedCross@Hazard2024!
+            </div>
+            <button class="btn" onclick="createAccount('redcross-admin@hazard.gov.ph', 'RedCross@Hazard2024!', 'Red Cross Administrator', 'admin', 'Philippine Red Cross', 'REDCROSS')">
+                Create Red Cross Account
+            </button>
+        </div>
+
+        <div class="account-card admin">
+            <div class="account-type">🏥 ADMIN - DOH</div>
+            <div class="details">
+                <strong>Agency:</strong> Department of Health<br>
+                <strong>Role:</strong> Administrator<br>
+                <strong>Permissions:</strong> Hazard reports management, analytics
+            </div>
+            <div class="credentials">
+                Email: doh-admin@hazard.gov.ph<br>
+                Password: DOH@Hazard2024!
+            </div>
+            <button class="btn" onclick="createAccount('doh-admin@hazard.gov.ph', 'DOH@Hazard2024!', 'DOH Administrator', 'admin', 'Department of Health', 'DOH')">
+                Create DOH Account
+            </button>
+        </div>
+
+        <div class="account-card admin">
+            <div class="account-type">🏛️ ADMIN - DILG</div>
+            <div class="details">
+                <strong>Agency:</strong> Department of the Interior and Local Government<br>
+                <strong>Role:</strong> Administrator<br>
+                <strong>Permissions:</strong> Hazard reports management, analytics
+            </div>
+            <div class="credentials">
+                Email: dilg-admin@hazard.gov.ph<br>
+                Password: DILG@Hazard2024!
+            </div>
+            <button class="btn" onclick="createAccount('dilg-admin@hazard.gov.ph', 'DILG@Hazard2024!', 'DILG Administrator', 'admin', 'Department of the Interior and Local Government', 'DILG')">
+                Create DILG Account
+            </button>
+        </div>
+    </div>
+
+    <script>
+        // Firebase configuration
+        const firebaseConfig = {
+            apiKey: "AIzaSyBxFSpEKq5Fv7vRyHaY7_G9MeoaA-mppNE",
+            authDomain: "thehazard-5f87e.firebaseapp.com",
+            projectId: "thehazard-5f87e",
+            storageBucket: "thehazard-5f87e.firebasestorage.app",
+            messagingSenderId: "364711835242",
+            appId: "1:364711835242:web:320d1b61b48434d8007c13",
+            measurementId: "G-V14MY8KSJK"
+        };
+
+        // Initialize Firebase
+        firebase.initializeApp(firebaseConfig);
+        const auth = firebase.auth();
+        const db = firebase.firestore();
+
+        async function createAccount(email, password, displayName, role, agency, agencyCode) {
+            const statusDiv = document.getElementById('status');
+            
+            try {
+                statusDiv.innerHTML = `<div class="status">Creating account for ${agencyCode}...</div>`;
+                
+                // Create authentication user
+                const userCredential = await auth.createUserWithEmailAndPassword(email, password);
+                const user = userCredential.user;
+                
+                // Update display name
+                await user.updateProfile({ displayName });
+                
+                // Create user document in Firestore
+                const permissions = role === 'super_admin' 
+                    ? ['user_management', 'hazard_reports', 'analytics', 'system_config', 'api_management', 'maintenance']
+                    : ['hazard_reports', 'analytics'];
+                
+                await db.collection('users').doc(user.uid).set({
+                    uid: user.uid,
+                    email: email,
+                    displayName: displayName,
+                    role: role,
+                    agency: agency,
+                    agencyCode: agencyCode,
+                    isActive: true,
+                    createdAt: firebase.firestore.FieldValue.serverTimestamp(),
+                    lastLogin: firebase.firestore.FieldValue.serverTimestamp(),
+                    permissions: permissions
+                });
+                
+                statusDiv.innerHTML = `<div class="status success">✅ Successfully created ${agencyCode} admin account!</div>`;
+                
+            } catch (error) {
+                console.error('Error creating account:', error);
+                if (error.code === 'auth/email-already-in-use') {
+                    statusDiv.innerHTML = `<div class="status error">⚠️ Account ${email} already exists!</div>`;
+                } else {
+                    statusDiv.innerHTML = `<div class="status error">❌ Error creating account: ${error.message}</div>`;
+                }
+            }
+        }
+    </script>
+</body>
+</html>

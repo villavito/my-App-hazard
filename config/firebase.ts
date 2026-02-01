@@ -1,40 +1,54 @@
-import { initializeApp } from 'firebase/app';
-import { getAuth } from 'firebase/auth';
-import { getFirestore } from 'firebase/firestore';
+// Firebase configuration for Expo
+import { initializeApp } from "firebase/app";
+import { getAuth } from "firebase/auth";
+import { getFirestore } from "firebase/firestore";
+import { getStorage } from "firebase/storage";
 
-// Your web app's Firebase configuration
-const firebaseConfig = {
-  apiKey: "AIzaSyBxFSpEKq5Fv7vRyHaY7_G9MeoaA-mppNE",
-  authDomain: "thehazard-5f87e.firebaseapp.com",
-  projectId: "thehazard-5f87e",
-  storageBucket: "thehazard-5f87e.firebasestorage.app",
-  messagingSenderId: "364711835242",
-  appId: "1:364711835242:web:efeeb73cee5e41aa007c13",
-  measurementId: "G-1WXP5HPNBZ"
+// Firebase configuration
+const firebaseConfig: any = {
+  apiKey: "AIzaSyCMz8fLrVUG-ujxt1SSjiN537p_yCMQnPg",
+  authDomain: "thehazard-75651.firebaseapp.com",
+  databaseURL: "https://thehazard-75651-default-rtdb.asia-southeast1.firebasedatabase.app",
+  projectId: "thehazard-75651",
+  storageBucket: "thehazard-75651.firebasestorage.app",
+  messagingSenderId: "203788333932",
+  appId: "1:203788333932:web:3e4794421129e0f73d3949",
+  measurementId: "G-E3CBCE8VXV"
 };
 
 // Initialize Firebase
 let app: any = null;
 let auth: any = null;
 let db: any = null;
+let storage: any = null;
 
-// Initialize Firebase on first use
+// Lazy initialization function
 const initializeFirebase = () => {
   if (!app) {
-    try {
-      app = initializeApp(firebaseConfig);
-      auth = getAuth(app);
-      db = getFirestore(app);
-      console.log('Firebase initialized successfully');
-    } catch (error) {
-      console.error('Firebase initialization error:', error);
-      throw error;
-    }
+    app = initializeApp(firebaseConfig);
+    auth = getAuth(app);
+    db = getFirestore(app);
+    storage = getStorage(app);
+    
+    console.log('🔥 Firebase initialized for Expo');
+    console.log('📱 Auth ready');
+    console.log('🗄️ Firestore ready');
+    console.log('💾 Storage ready');
   }
-  return { app, auth, db };
+  return { app, auth, db, storage };
 };
 
-// Lazy initialization functions
+// Initialize on first import
+const { app: initializedApp, auth: initializedAuth, db: initializedDb } = initializeFirebase();
+app = initializedApp;
+auth = initializedAuth;
+db = initializedDb;
+
+// Initialize storage separately
+storage = getStorage(app);
+
+// Export Firebase services
+export { app, auth, db, storage };
 export const getFirebaseAuth = () => {
   if (!auth) {
     initializeFirebase();
@@ -49,13 +63,13 @@ export const getFirebaseDB = () => {
   return db;
 };
 
-export const getFirebaseApp = () => {
-  if (!app) {
+export const getFirebaseStorage = () => {
+  if (!storage) {
     initializeFirebase();
   }
-  return app;
+  return storage;
 };
 
-// For backward compatibility - these will initialize Firebase when accessed
-export { auth, db };
+// Export onAuthStateChanged separately
+export { onAuthStateChanged } from 'firebase/auth';
 export default app;

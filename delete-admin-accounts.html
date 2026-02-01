@@ -1,0 +1,306 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Delete All Admin Accounts</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            max-width: 800px;
+            margin: 50px auto;
+            padding: 20px;
+            background-color: #f5f5f5;
+        }
+        .container {
+            background: white;
+            padding: 30px;
+            border-radius: 10px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+        }
+        .warning {
+            background-color: #fff3cd;
+            border: 1px solid #ffeaa7;
+            color: #856404;
+            padding: 15px;
+            border-radius: 5px;
+            margin-bottom: 20px;
+        }
+        .danger {
+            background-color: #f8d7da;
+            border: 1px solid #f5c6cb;
+            color: #721c24;
+            padding: 15px;
+            border-radius: 5px;
+            margin-bottom: 20px;
+        }
+        button {
+            background-color: #dc3545;
+            color: white;
+            padding: 12px 24px;
+            border: none;
+            border-radius: 5px;
+            cursor: pointer;
+            margin-right: 10px;
+            margin-bottom: 10px;
+        }
+        button:hover {
+            background-color: #c82333;
+        }
+        .safe-button {
+            background-color: #007AFF;
+        }
+        .safe-button:hover {
+            background-color: #0056b3;
+        }
+        .status {
+            margin-top: 20px;
+            padding: 10px;
+            border-radius: 5px;
+        }
+        .success {
+            background-color: #d4edda;
+            color: #155724;
+            border: 1px solid #c3e6cb;
+        }
+        .error {
+            background-color: #f8d7da;
+            color: #721c24;
+            border: 1px solid #f5c6cb;
+        }
+        .admin-list {
+            background: #f8f9fa;
+            padding: 15px;
+            border-radius: 8px;
+            margin-bottom: 15px;
+        }
+        .admin-item {
+            background: white;
+            padding: 10px;
+            margin: 5px 0;
+            border-radius: 5px;
+            border-left: 4px solid #dc3545;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>⚠️ Delete All Admin Accounts</h1>
+        
+        <div class="danger">
+            <strong>⚠️ DANGER: This action cannot be undone!</strong><br>
+            This will permanently delete ALL admin accounts from the system.
+        </div>
+        
+        <div class="warning">
+            <strong>📋 Admin Accounts to be Deleted:</strong>
+            <div class="admin-list">
+                <div class="admin-item">🏢 OCD Admin: ocd-admin@hazard.gov.ph</div>
+                <div class="admin-item">👥 DSWD Admin: dswd-admin@hazard.gov.ph</div>
+                <div class="admin-item">🚒 BFP Admin: bfp-admin@hazard.gov.ph</div>
+                <div class="admin-item">👮 PNP Admin: pnp-admin@hazard.gov.ph</div>
+                <div class="admin-item">🏥 Red Cross Admin: redcross-admin@hazard.gov.ph</div>
+                <div class="admin-item">🏥 DOH Admin: doh-admin@hazard.gov.ph</div>
+                <div class="admin-item">🏛️ DILG Admin: dilg-admin@hazard.gov.ph</div>
+            </div>
+        </div>
+        
+        <button onclick="deleteAllAdmins()">🗑️ Delete All Admin Accounts</button>
+        <button onclick="listAdmins()" class="safe-button">📋 List Current Admins</button>
+        <button onclick="createSuperAdmin()" class="safe-button">👑 Create Super Admin</button>
+        
+        <div id="status"></div>
+    </div>
+
+    <!-- Firebase SDK -->
+    <script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-app-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-auth-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-firestore-compat.js"></script>
+
+    <script>
+        // Firebase configuration
+        const firebaseConfig = {
+            apiKey: "AIzaSyCMz8fLrVUG-ujxt1SSjiN537p_yCMQnPg",
+            authDomain: "thehazard-75651.firebaseapp.com",
+            databaseURL: "https://thehazard-75651-default-rtdb.asia-southeast1.firebasedatabase.app",
+            projectId: "thehazard-75651",
+            storageBucket: "thehazard-75651.firebasestorage.app",
+            messagingSenderId: "203788333932",
+            appId: "1:203788333932:web:3e4794421129e0f73d3949",
+            measurementId: "G-E3CBCE8VXV"
+        };
+
+        // Initialize Firebase
+        firebase.initializeApp(firebaseConfig);
+        const auth = firebase.auth();
+        const db = firebase.firestore();
+
+        // Admin accounts to delete
+        const adminAccounts = [
+            'ocd-admin@hazard.gov.ph',
+            'dswd-admin@hazard.gov.ph',
+            'bfp-admin@hazard.gov.ph',
+            'pnp-admin@hazard.gov.ph',
+            'redcross-admin@hazard.gov.ph',
+            'doh-admin@hazard.gov.ph',
+            'dilg-admin@hazard.gov.ph'
+        ];
+
+        function showStatus(message, isError = false) {
+            const statusDiv = document.getElementById('status');
+            statusDiv.innerHTML = '<div class="' + (isError ? 'error' : 'success') + '">' + message + '</div>';
+        }
+
+        async function listAdmins() {
+            try {
+                showStatus('📋 Listing current admin accounts...');
+                
+                const snapshot = await db.collection('users')
+                    .where('role', 'in', ['admin', 'super_admin'])
+                    .get();
+                
+                let adminList = '<h3>📋 Current Admin Accounts:</h3>';
+                let count = 0;
+                
+                snapshot.forEach(doc => {
+                    const user = doc.data();
+                    adminList += `<div class="admin-item">
+                        👤 ${user.displayName || 'N/A'}<br>
+                        📧 ${user.email}<br>
+                        🔑 Role: ${user.role}<br>
+                        🆔 UID: ${doc.id}<br>
+                        📅 Created: ${user.createdAt ? new Date(user.createdAt.toDate()).toLocaleString() : 'N/A'}
+                    </div>`;
+                    count++;
+                });
+                
+                if (count === 0) {
+                    adminList += '<div class="admin-item">✅ No admin accounts found</div>';
+                } else {
+                    adminList += `<div class="admin-item"><strong>Total: ${count} admin(s)</strong></div>`;
+                }
+                
+                showStatus(adminList, false);
+                
+            } catch (error) {
+                console.error('❌ Error listing admins:', error);
+                showStatus('❌ Error listing admin accounts: ' + error.message, true);
+            }
+        }
+
+        async function deleteAllAdmins() {
+            if (!confirm('⚠️ Are you absolutely sure you want to delete ALL admin accounts?\n\nThis action cannot be undone!')) {
+                return;
+            }
+            
+            try {
+                showStatus('🗑️ Deleting all admin accounts...');
+                
+                let deletedCount = 0;
+                let errors = [];
+                
+                // Get all admin users
+                const snapshot = await db.collection('users')
+                    .where('role', 'in', ['admin', 'super_admin'])
+                    .get();
+                
+                if (snapshot.empty) {
+                    showStatus('✅ No admin accounts found to delete!', false);
+                    return;
+                }
+                
+                // Delete each admin account
+                for (const doc of snapshot.docs) {
+                    try {
+                        const user = doc.data();
+                        console.log('🗑️ Deleting admin:', user.email);
+                        
+                        // Delete from Firestore
+                        await db.collection('users').doc(doc.id).delete();
+                        
+                        // Note: Firebase Auth users can only be deleted by Admin SDK
+                        // This deletes the user document but the auth account remains
+                        
+                        deletedCount++;
+                        console.log('✅ Deleted admin document:', user.email);
+                        
+                    } catch (error) {
+                        console.error('❌ Error deleting admin:', doc.id, error);
+                        errors.push(`Failed to delete ${doc.data().email}: ${error.message}`);
+                    }
+                }
+                
+                let resultMessage = `<h3>🗑️ Deletion Complete</h3>`;
+                resultMessage += `✅ Successfully deleted: <strong>${deletedCount}</strong> admin account(s)<br>`;
+                
+                if (errors.length > 0) {
+                    resultMessage += `<br>❌ Errors encountered:<br>`;
+                    errors.forEach(error => {
+                        resultMessage += `• ${error}<br>`;
+                    });
+                }
+                
+                resultMessage += `<br><strong>Note:</strong> User documents deleted from Firestore. Firebase Auth accounts may require Admin SDK for complete removal.`;
+                
+                showStatus(resultMessage, false);
+                
+            } catch (error) {
+                console.error('❌ Error deleting admins:', error);
+                showStatus('❌ Error deleting admin accounts: ' + error.message, true);
+            }
+        }
+
+        async function createSuperAdmin() {
+            try {
+                showStatus('👑 Creating Super Admin account...');
+                
+                const email = 'ndrrmc-admin@hazard.gov.ph';
+                const password = 'NDRRMC@Hazard2024!';
+                const displayName = 'NDRRMC Administrator';
+                const role = 'super_admin';
+                
+                // Create user in Firebase Auth
+                const userCredential = await auth.createUserWithEmailAndPassword(email, password);
+                const user = userCredential.user;
+                
+                // Update display name
+                await user.updateProfile({ displayName });
+                
+                // Create user document in Firestore
+                const userData = {
+                    uid: user.uid,
+                    email: user.email,
+                    displayName: displayName,
+                    role: role,
+                    agency: 'National Disaster Risk Reduction and Management Council',
+                    agencyCode: 'NDRRMC',
+                    createdAt: firebase.firestore.FieldValue.serverTimestamp(),
+                    lastLogin: firebase.firestore.FieldValue.serverTimestamp(),
+                    isActive: true,
+                    permissions: ['admin_management', 'system_config', 'user_management']
+                };
+                
+                await db.collection('users').doc(user.uid).set(userData);
+                
+                showStatus(`✅ Super Admin created successfully!<br>
+                    📧 Email: ${email}<br>
+                    🔐 Password: ${password}<br>
+                    👑 Role: ${role}<br>
+                    You can now login with these credentials!`, false);
+                
+            } catch (error) {
+                if (error.code === 'auth/email-already-in-use') {
+                    showStatus('✅ Super Admin already exists! You can login with:<br>📧 ndrrmc-admin@hazard.gov.ph<br>🔐 NDRRMC@Hazard2024!', false);
+                } else {
+                    showStatus('❌ Error creating Super Admin: ' + error.message, true);
+                }
+            }
+        }
+
+        // Auto-list admins on page load
+        window.onload = function() {
+            listAdmins();
+        };
+    </script>
+</body>
+</html>

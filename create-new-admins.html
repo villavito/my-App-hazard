@@ -1,0 +1,367 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Create New Admin & Super Admin</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            max-width: 800px;
+            margin: 50px auto;
+            padding: 20px;
+            background-color: #f5f5f5;
+        }
+        .container {
+            background: white;
+            padding: 30px;
+            border-radius: 10px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+        }
+        .info {
+            background-color: #d1ecf1;
+            border: 1px solid #bee5eb;
+            color: #0c5460;
+            padding: 15px;
+            border-radius: 5px;
+            margin-bottom: 20px;
+        }
+        .success {
+            background-color: #d4edda;
+            color: #155724;
+            border: 1px solid #c3e6cb;
+            padding: 15px;
+            border-radius: 5px;
+            margin-bottom: 20px;
+        }
+        .form-group {
+            margin-bottom: 15px;
+        }
+        label {
+            display: block;
+            margin-bottom: 5px;
+            font-weight: bold;
+        }
+        input, select {
+            width: 100%;
+            padding: 10px;
+            border: 1px solid #ddd;
+            border-radius: 5px;
+            box-sizing: border-box;
+        }
+        button {
+            background-color: #007bff;
+            color: white;
+            padding: 12px 24px;
+            border: none;
+            border-radius: 5px;
+            cursor: pointer;
+            margin-right: 10px;
+            margin-bottom: 10px;
+        }
+        button:hover {
+            background-color: #0056b3;
+        }
+        button.danger {
+            background-color: #dc3545;
+        }
+        button.danger:hover {
+            background-color: #c82333;
+        }
+        .status {
+            margin-top: 20px;
+            padding: 10px;
+            border-radius: 5px;
+        }
+        .error {
+            background-color: #f8d7da;
+            color: #721c24;
+            border: 1px solid #f5c6cb;
+        }
+        .credentials {
+            background: #f8f9fa;
+            padding: 15px;
+            border-radius: 8px;
+            margin-bottom: 15px;
+            border-left: 4px solid #007bff;
+        }
+        .admin-section {
+            border: 1px solid #dee2e6;
+            border-radius: 8px;
+            padding: 20px;
+            margin-bottom: 20px;
+        }
+        .super-admin {
+            border-left: 4px solid #dc3545;
+        }
+        .regular-admin {
+            border-left: 4px solid #007bff;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>👑 Create New Admin & Super Admin</h1>
+        
+        <div class="info">
+            <strong>ℹ️ This will create new admin accounts with completely blank dashboards.</strong><br>
+            Both accounts will have empty dashboards with no statistics or admin tools.
+        </div>
+        
+        <!-- Super Admin Section -->
+        <div class="admin-section super-admin">
+            <h3>👑 Super Admin Account</h3>
+            <div class="form-group">
+                <label for="superEmail">Email:</label>
+                <input type="email" id="superEmail" value="super-admin@hazard.gov.ph" readonly>
+            </div>
+            <div class="form-group">
+                <label for="superPassword">Password:</label>
+                <input type="password" id="superPassword" value="SuperAdmin123!" placeholder="Enter password">
+            </div>
+            <div class="form-group">
+                <label for="superName">Display Name:</label>
+                <input type="text" id="superName" value="System Administrator">
+            </div>
+            <button onclick="createSuperAdmin()">👑 Create Super Admin</button>
+        </div>
+        
+        <!-- Regular Admin Section -->
+        <div class="admin-section regular-admin">
+            <h3>👤 Regular Admin Account</h3>
+            <div class="form-group">
+                <label for="adminEmail">Email:</label>
+                <input type="email" id="adminEmail" value="admin@hazard.gov.ph" readonly>
+            </div>
+            <div class="form-group">
+                <label for="adminPassword">Password:</label>
+                <input type="password" id="adminPassword" value="Admin123!" placeholder="Enter password">
+            </div>
+            <div class="form-group">
+                <label for="adminName">Display Name:</label>
+                <input type="text" id="adminName" value="Hazard Administrator">
+            </div>
+            <div class="form-group">
+                <label for="adminAgency">Agency:</label>
+                <input type="text" id="adminAgency" value="Hazard Management Agency">
+            </div>
+            <button onclick="createRegularAdmin()">👤 Create Regular Admin</button>
+        </div>
+        
+        <!-- Quick Actions -->
+        <div class="admin-section">
+            <h3>🚀 Quick Actions</h3>
+            <button onclick="createBothAdmins()">👑👤 Create Both Admins</button>
+            <button onclick="checkExisting()">🔍 Check Existing Admins</button>
+            <button onclick="deleteExisting()" class="danger">🗑️ Delete Existing Admins</button>
+        </div>
+        
+        <div id="status"></div>
+    </div>
+
+    <!-- Firebase SDK -->
+    <script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-app-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-auth-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-firestore-compat.js"></script>
+
+    <script>
+        // Firebase configuration
+        const firebaseConfig = {
+            apiKey: "AIzaSyCMz8fLrVUG-ujxt1SSjiN537p_yCMQnPg",
+            authDomain: "thehazard-75651.firebaseapp.com",
+            databaseURL: "https://thehazard-75651-default-rtdb.asia-southeast1.firebasedatabase.app",
+            projectId: "thehazard-75651",
+            storageBucket: "thehazard-75651.firebasestorage.app",
+            messagingSenderId: "203788333932",
+            appId: "1:203788333932:web:3e4794421129e0f73d3949",
+            measurementId: "G-E3CBCE8VXV"
+        };
+
+        // Initialize Firebase
+        firebase.initializeApp(firebaseConfig);
+        const auth = firebase.auth();
+        const db = firebase.firestore();
+
+        function showStatus(message, isError = false) {
+            const statusDiv = document.getElementById('status');
+            statusDiv.innerHTML = '<div class="' + (isError ? 'error' : 'success') + '">' + message + '</div>';
+        }
+
+        async function createSuperAdmin() {
+            try {
+                showStatus('👑 Creating Super Admin account...');
+                
+                const email = document.getElementById('superEmail').value;
+                const password = document.getElementById('superPassword').value;
+                const displayName = document.getElementById('superName').value;
+                
+                // Create user in Firebase Auth
+                const userCredential = await auth.createUserWithEmailAndPassword(email, password);
+                const user = userCredential.user;
+                
+                // Update display name
+                await user.updateProfile({ displayName });
+                
+                // Create user document in Firestore
+                const userData = {
+                    uid: user.uid,
+                    email: user.email,
+                    displayName: displayName,
+                    role: 'super_admin',
+                    agency: 'System Administration',
+                    agencyCode: 'SYSADMIN',
+                    createdAt: firebase.firestore.FieldValue.serverTimestamp(),
+                    lastLogin: firebase.firestore.FieldValue.serverTimestamp(),
+                    isActive: true,
+                    permissions: ['system_access', 'blank_dashboard']
+                };
+                
+                await db.collection('users').doc(user.uid).set(userData);
+                
+                showStatus(`✅ Super Admin created successfully!<br>
+                    <div class="credentials">
+                        👑 Role: Super Admin<br>
+                        📧 Email: ${email}<br>
+                        🔐 Password: ${password}<br>
+                        👤 Name: ${displayName}<br>
+                        📋 Dashboard: Blank (empty)<br>
+                        🆔 UID: ${user.uid}
+                    </div>
+                    <strong>Login credentials ready! Dashboard will be completely blank.</strong>`, false);
+                
+            } catch (error) {
+                console.error('❌ Error creating Super Admin:', error);
+                if (error.code === 'auth/email-already-in-use') {
+                    showStatus('✅ Super Admin already exists! You can login with the provided credentials.', false);
+                } else {
+                    showStatus('❌ Error creating Super Admin: ' + error.message, true);
+                }
+            }
+        }
+
+        async function createRegularAdmin() {
+            try {
+                showStatus('👤 Creating Regular Admin account...');
+                
+                const email = document.getElementById('adminEmail').value;
+                const password = document.getElementById('adminPassword').value;
+                const displayName = document.getElementById('adminName').value;
+                const agency = document.getElementById('adminAgency').value;
+                
+                // Create user in Firebase Auth
+                const userCredential = await auth.createUserWithEmailAndPassword(email, password);
+                const user = userCredential.user;
+                
+                // Update display name
+                await user.updateProfile({ displayName });
+                
+                // Create user document in Firestore
+                const userData = {
+                    uid: user.uid,
+                    email: user.email,
+                    displayName: displayName,
+                    role: 'admin',
+                    agency: agency,
+                    agencyCode: 'HAZARD',
+                    createdAt: firebase.firestore.FieldValue.serverTimestamp(),
+                    lastLogin: firebase.firestore.FieldValue.serverTimestamp(),
+                    isActive: true,
+                    permissions: ['admin_access', 'blank_dashboard']
+                };
+                
+                await db.collection('users').doc(user.uid).set(userData);
+                
+                showStatus(`✅ Regular Admin created successfully!<br>
+                    <div class="credentials">
+                        👤 Role: Admin<br>
+                        📧 Email: ${email}<br>
+                        🔐 Password: ${password}<br>
+                        👤 Name: ${displayName}<br>
+                        🏢 Agency: ${agency}<br>
+                        📋 Dashboard: Blank (empty)<br>
+                        🆔 UID: ${user.uid}
+                    </div>
+                    <strong>Login credentials ready! Dashboard will be completely blank.</strong>`, false);
+                
+            } catch (error) {
+                console.error('❌ Error creating Regular Admin:', error);
+                if (error.code === 'auth/email-already-in-use') {
+                    showStatus('✅ Regular Admin already exists! You can login with the provided credentials.', false);
+                } else {
+                    showStatus('❌ Error creating Regular Admin: ' + error.message, true);
+                }
+            }
+        }
+
+        async function createBothAdmins() {
+            showStatus('🚀 Creating both admin accounts...');
+            await createSuperAdmin();
+            await createRegularAdmin();
+        }
+
+        async function checkExisting() {
+            try {
+                showStatus('🔍 Checking existing admin accounts...');
+                
+                const snapshot = await db.collection('users')
+                    .where('role', 'in', ['admin', 'super_admin'])
+                    .get();
+                
+                if (snapshot.empty) {
+                    showStatus('ℹ️ No admin accounts found. Ready to create new ones.', false);
+                } else {
+                    let adminList = '<h3>🔍 Existing Admin Accounts:</h3>';
+                    snapshot.forEach(doc => {
+                        const user = doc.data();
+                        adminList += `
+                            <div class="credentials">
+                                ${user.role === 'super_admin' ? '👑' : '👤'} <strong>${user.displayName}</strong><br>
+                                📧 Email: ${user.email}<br>
+                                🔑 Role: ${user.role}<br>
+                                🏢 Agency: ${user.agency || 'Not specified'}<br>
+                                🆔 UID: ${doc.id}
+                            </div>
+                        `;
+                    });
+                    showStatus(adminList, false);
+                }
+                
+            } catch (error) {
+                console.error('❌ Error checking admins:', error);
+                showStatus('❌ Error checking admin accounts: ' + error.message, true);
+            }
+        }
+
+        async function deleteExisting() {
+            if (!confirm('⚠️ Are you sure you want to delete all existing admin accounts?')) {
+                return;
+            }
+            
+            try {
+                showStatus('🗑️ Deleting existing admin accounts...');
+                
+                const snapshot = await db.collection('users')
+                    .where('role', 'in', ['admin', 'super_admin'])
+                    .get();
+                
+                let deletedCount = 0;
+                for (const doc of snapshot.docs) {
+                    await db.collection('users').doc(doc.id).delete();
+                    deletedCount++;
+                }
+                
+                showStatus(`✅ Deleted ${deletedCount} admin accounts. Ready to create new ones!`, false);
+                
+            } catch (error) {
+                console.error('❌ Error deleting admins:', error);
+                showStatus('❌ Error deleting admin accounts: ' + error.message, true);
+            }
+        }
+
+        // Auto-check on page load
+        window.onload = function() {
+            checkExisting();
+        };
+    </script>
+</body>
+</html>

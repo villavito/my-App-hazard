@@ -4,11 +4,11 @@ import { AuthProvider, useAuth } from '../contexts/AuthContext';
 import { NotificationProvider } from '../contexts/NotificationContext';
 
 function LayoutContent() {
-  const { loading, navigationLoading } = useAuth();
+  const { loading } = useAuth();
 
-  // Show loading screen during auth initialization or navigation
-  if (loading || navigationLoading) {
-    return <LoadingScreen message={loading ? 'Initializing app...' : 'Loading...'} />;
+  // Show loading screen during auth initialization
+  if (loading) {
+    return <LoadingScreen />;
   }
 
   return <Slot />;

@@ -1,0 +1,258 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Test Registration</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            max-width: 600px;
+            margin: 50px auto;
+            padding: 20px;
+            background-color: #f5f5f5;
+        }
+        .container {
+            background: white;
+            padding: 30px;
+            border-radius: 10px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+        }
+        .form-group {
+            margin-bottom: 15px;
+        }
+        label {
+            display: block;
+            margin-bottom: 5px;
+            font-weight: bold;
+        }
+        input {
+            width: 100%;
+            padding: 10px;
+            border: 1px solid #ddd;
+            border-radius: 5px;
+            box-sizing: border-box;
+        }
+        button {
+            background-color: #007AFF;
+            color: white;
+            padding: 12px 24px;
+            border: none;
+            border-radius: 5px;
+            cursor: pointer;
+            margin-right: 10px;
+            margin-bottom: 10px;
+        }
+        button:hover {
+            background-color: #0056b3;
+        }
+        .status {
+            margin-top: 20px;
+            padding: 10px;
+            border-radius: 5px;
+        }
+        .success {
+            background-color: #d4edda;
+            color: #155724;
+            border: 1px solid #c3e6cb;
+        }
+        .error {
+            background-color: #f8d7da;
+            color: #721c24;
+            border: 1px solid #f5c6cb;
+        }
+        .info {
+            background-color: #d1ecf1;
+            border: 1px solid #bee5eb;
+            color: #0c5460;
+            padding: 15px;
+            border-radius: 5px;
+            margin-bottom: 20px;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>🧪 Test Registration</h1>
+        
+        <div class="info">
+            <strong>Test Firebase registration directly in browser</strong><br>
+            This will help us identify if the issue is with Firebase or the app.
+        </div>
+        
+        <div class="form-group">
+            <label for="email">Email:</label>
+            <input type="email" id="email" value="testuser@example.com" placeholder="Enter email">
+        </div>
+        
+        <div class="form-group">
+            <label for="password">Password:</label>
+            <input type="password" id="password" value="TestUser123!" placeholder="Enter password">
+        </div>
+        
+        <div class="form-group">
+            <label for="displayName">Display Name:</label>
+            <input type="text" id="displayName" value="Test User" placeholder="Enter name">
+        </div>
+        
+        <button onclick="testRegistration()">🧪 Test Registration</button>
+        <button onclick="checkFirebase()">🔥 Check Firebase</button>
+        <button onclick="listUsers()">👥 List Users</button>
+        
+        <div id="status"></div>
+    </div>
+
+    <!-- Firebase SDK -->
+    <script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-app-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-auth-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-firestore-compat.js"></script>
+
+    <script>
+        // Firebase configuration - matching the app config
+        const firebaseConfig = {
+            apiKey: "AIzaSyCMz8fLrVUG-ujxt1SSjiN537p_yCMQnPg",
+            authDomain: "thehazard-75651.firebaseapp.com",
+            databaseURL: "https://thehazard-75651-default-rtdb.asia-southeast1.firebasedatabase.app",
+            projectId: "thehazard-75651",
+            storageBucket: "thehazard-75651.firebasestorage.app",
+            messagingSenderId: "203788333932",
+            appId: "1:203788333932:web:3e4794421129e0f73d3949",
+            measurementId: "G-E3CBCE8VXV"
+        };
+
+        // Initialize Firebase
+        firebase.initializeApp(firebaseConfig);
+        const auth = firebase.auth();
+        const db = firebase.firestore();
+
+        function showStatus(message, isError = false) {
+            const statusDiv = document.getElementById('status');
+            statusDiv.innerHTML = '<div class="' + (isError ? 'error' : 'success') + '">' + message + '</div>';
+        }
+
+        function checkFirebase() {
+            try {
+                showStatus('🔥 Checking Firebase connection...');
+                
+                // Test Firebase initialization
+                console.log('🔥 Firebase initialized:', firebase.app().name);
+                console.log('📱 Auth ready:', auth);
+                console.log('🗄️ Firestore ready:', db);
+                
+                showStatus(`✅ Firebase is working!<br>
+                    📱 Project: ${firebase.app().options.projectId}<br>
+                    🔑 Auth: Ready<br>
+                    🗄️ Firestore: Ready<br>
+                    You can now test registration.`, false);
+                
+            } catch (error) {
+                console.error('❌ Firebase error:', error);
+                showStatus(`❌ Firebase connection failed:<br><strong>Error:</strong> ${error.message}`, true);
+            }
+        }
+
+        async function testRegistration() {
+            try {
+                const email = document.getElementById('email').value;
+                const password = document.getElementById('password').value;
+                const displayName = document.getElementById('displayName').value;
+                
+                showStatus('🧪 Testing registration...');
+                
+                console.log('🔥 Starting registration test...');
+                console.log('📧 Email:', email);
+                console.log('👤 Name:', displayName);
+                
+                // Step 1: Create user in Firebase Auth
+                console.log('🚀 Creating user in Firebase Auth...');
+                const userCredential = await auth.createUserWithEmailAndPassword(email, password);
+                const user = userCredential.user;
+                console.log('✅ User created in Auth:', user.uid);
+                
+                // Step 2: Update display name
+                console.log('📝 Updating display name...');
+                await user.updateProfile({ displayName });
+                console.log('✅ Display name updated');
+                
+                // Step 3: Create user document in Firestore
+                console.log('💾 Creating Firestore document...');
+                const userData = {
+                    uid: user.uid,
+                    email: user.email,
+                    displayName: displayName,
+                    role: 'user',
+                    createdAt: firebase.firestore.FieldValue.serverTimestamp(),
+                    lastLogin: firebase.firestore.FieldValue.serverTimestamp(),
+                    isActive: true
+                };
+                
+                await db.collection('users').doc(user.uid).set(userData);
+                console.log('✅ Firestore document created');
+                
+                showStatus(`✅ Registration test successful!<br>
+                    <div class="success">
+                        👤 User created successfully!<br>
+                        📧 Email: ${email}<br>
+                        👑 Name: ${displayName}<br>
+                        🆔 UID: ${user.uid}<br>
+                        🔑 Role: user<br>
+                        📅 Created: Just now<br>
+                        ✅ Firebase Auth: Working<br>
+                        🗄️ Firestore: Working
+                    </div>
+                    <strong>Registration is working perfectly! Check your Firebase Console.</strong>`, false);
+                
+            } catch (error) {
+                console.error('❌ Registration test error:', error);
+                console.error('Error code:', error.code);
+                console.error('Error message:', error.message);
+                
+                if (error.code === 'auth/email-already-in-use') {
+                    showStatus('ℹ️ User already exists! Registration is working, but this email is taken.', false);
+                } else if (error.code === 'auth/weak-password') {
+                    showStatus('❌ Password too weak. Use a stronger password.', true);
+                } else if (error.code === 'auth/invalid-api-key') {
+                    showStatus('❌ Firebase API key is invalid. Check your configuration.', true);
+                } else {
+                    showStatus(`❌ Registration test failed:<br><strong>Code:</strong> ${error.code}<br><strong>Message:</strong> ${error.message}`, true);
+                }
+            }
+        }
+
+        async function listUsers() {
+            try {
+                showStatus('👥 Listing users from Firestore...');
+                
+                const snapshot = await db.collection('users').get();
+                
+                if (snapshot.empty) {
+                    showStatus('ℹ️ No users found in Firestore.', false);
+                } else {
+                    let userList = '<h3>👥 Users in Firestore:</h3>';
+                    snapshot.forEach(doc => {
+                        const user = doc.data();
+                        userList += `
+                            <div style="background: #f8f9fa; padding: 10px; margin: 5px 0; border-radius: 5px;">
+                                <strong>${user.displayName}</strong><br>
+                                📧 ${user.email}<br>
+                                🔑 ${user.role}<br>
+                                🆔 ${doc.id}
+                            </div>
+                        `;
+                    });
+                    showStatus(userList, false);
+                }
+                
+            } catch (error) {
+                console.error('❌ Error listing users:', error);
+                showStatus('❌ Error listing users: ' + error.message, true);
+            }
+        }
+
+        // Auto-check Firebase on page load
+        window.onload = function() {
+            checkFirebase();
+        };
+    </script>
+</body>
+</html>

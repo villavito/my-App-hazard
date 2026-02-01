@@ -1,0 +1,193 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Generate New Firebase API Key</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            max-width: 800px;
+            margin: 50px auto;
+            padding: 20px;
+            background-color: #f5f5f5;
+        }
+        .container {
+            background: white;
+            padding: 30px;
+            border-radius: 10px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+        }
+        .step {
+            background: #f8f9fa;
+            padding: 20px;
+            border-radius: 8px;
+            margin: 20px 0;
+            border-left: 4px solid #007AFF;
+        }
+        .code {
+            background: #2d3748;
+            color: #e2e8f0;
+            padding: 15px;
+            border-radius: 5px;
+            font-family: monospace;
+            margin: 10px 0;
+        }
+        .warning {
+            background-color: #fff3cd;
+            border: 1px solid #ffeaa7;
+            color: #856404;
+            padding: 15px;
+            border-radius: 5px;
+            margin: 20px 0;
+        }
+        .success {
+            background-color: #d4edda;
+            border: 1px solid #c3e6cb;
+            color: #155724;
+            padding: 15px;
+            border-radius: 5px;
+            margin: 20px 0;
+        }
+        button {
+            background-color: #007AFF;
+            color: white;
+            padding: 12px 24px;
+            border: none;
+            border-radius: 5px;
+            cursor: pointer;
+            margin: 10px 0;
+        }
+        button:hover {
+            background-color: #0056b3;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>🔑 Fix Firebase API Key Issue</h1>
+        
+        <div class="warning">
+            <strong>⚠️ Your current API key is being rejected by Firebase</strong><br>
+            This usually means the API key is invalid, revoked, or the project settings are incorrect.
+        </div>
+
+        <div class="step">
+            <h3>📋 Step 1: Go to Firebase Console</h3>
+            <p>Open this link: <a href="https://console.firebase.google.com/" target="_blank">https://console.firebase.google.com/</a></p>
+            <ol>
+                <li>Select your project: <strong>thehazard-75651</strong></li>
+                <li>Click the ⚙️ <strong>Project Settings</strong> (top left gear icon)</li>
+                <li>Go to the <strong>Service accounts</strong> tab</li>
+            </ol>
+        </div>
+
+        <div class="step">
+            <h3>🔑 Step 2: Generate New API Key</h3>
+            <ol>
+                <li>In Service accounts tab, look for <strong>"Web API Key"</strong></li>
+                <li>If you see your current key, click the menu (⋮) and select <strong>"Delete"</strong></li>
+                <li>Click <strong>"Create Web API Key"</strong></li>
+                <li>Copy the new API key (it starts with "AIzaSy...")</li>
+            </ol>
+        </div>
+
+        <div class="step">
+            <h3>📝 Step 3: Update Your Config File</h3>
+            <p>Update your <strong>firebase.ts</strong> file with the new API key:</p>
+            <div class="code">
+// Firebase configuration
+const firebaseConfig: any = {
+  apiKey: "PASTE_YOUR_NEW_API_KEY_HERE",
+  authDomain: "thehazard-75651.firebaseapp.com",
+  databaseURL: "https://thehazard-75651-default-rtdb.asia-southeast1.firebasedatabase.app",
+  projectId: "thehazard-75651",
+  storageBucket: "thehazard-75651.firebasestorage.app",
+  messagingSenderId: "203788333932",
+  appId: "1:203788333932:web:3e4794421129e0f73d3949",
+  measurementId: "G-E3CBCE8VXV"
+};
+            </div>
+        </div>
+
+        <div class="step">
+            <h3>🔄 Step 4: Restart Everything</h3>
+            <ol>
+                <li>Stop your Expo server (Ctrl+C)</li>
+                <li>Clear browser cache (F12 → Application → Clear storage)</li>
+                <li>Restart: <code>npx expo start --clear</code></li>
+                <li>Test registration again</li>
+            </ol>
+        </div>
+
+        <div class="step">
+            <h3>🧪 Step 5: Test New API Key</h3>
+            <p>After updating the API key, test it here:</p>
+            <input type="text" id="newApiKey" placeholder="Paste your new API key here" style="width: 100%; padding: 10px; margin: 10px 0;">
+            <button onclick="testNewAPIKey()">🧪 Test New API Key</button>
+            <div id="testResult"></div>
+        </div>
+
+        <div class="success">
+            <strong>💡 Alternative Solution:</strong><br>
+            If the above doesn't work, you might need to:<br>
+            1. Check if Email/Password sign-in is enabled in Firebase Console → Authentication → Sign-in method<br>
+            2. Verify your project hasn't been deleted or suspended<br>
+            3. Check if you're using the correct Firebase project
+        </div>
+    </div>
+
+    <!-- Firebase SDK -->
+    <script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-app-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-auth-compat.js"></script>
+
+    <script>
+        function testNewAPIKey() {
+            const newApiKey = document.getElementById('newApiKey').value.trim();
+            const resultDiv = document.getElementById('testResult');
+            
+            if (!newApiKey) {
+                resultDiv.innerHTML = '<div style="color: red;">Please enter an API key</div>';
+                return;
+            }
+            
+            resultDiv.innerHTML = '<div style="color: blue;">Testing API key...</div>';
+            
+            try {
+                // Delete any existing app
+                if (firebase.apps.length > 0) {
+                    firebase.app().delete();
+                }
+                
+                // Test with new API key
+                const testConfig = {
+                    apiKey: newApiKey,
+                    authDomain: "thehazard-75651.firebaseapp.com",
+                    projectId: "thehazard-75651"
+                };
+                
+                const app = firebase.initializeApp(testConfig);
+                const auth = firebase.auth();
+                
+                // Test the API key
+                auth.signInWithEmailAndPassword('test@test.com', 'test123')
+                    .then(() => {
+                        resultDiv.innerHTML = '<div style="color: red;">Unexpected success</div>';
+                    })
+                    .catch((error) => {
+                        if (error.code === 'auth/user-not-found') {
+                            resultDiv.innerHTML = '<div style="color: green;">✅ API Key is VALID! (User not found is expected)</div>';
+                        } else if (error.code === 'auth/api-key-not-valid') {
+                            resultDiv.innerHTML = '<div style="color: red;">❌ API Key is INVALID: ' + error.message + '</div>';
+                        } else {
+                            resultDiv.innerHTML = '<div style="color: orange;">⚠️ API Key test result: ' + error.message + '</div>';
+                        }
+                    });
+                    
+            } catch (error) {
+                resultDiv.innerHTML = '<div style="color: red;">❌ Error testing API key: ' + error.message + '</div>';
+            }
+        }
+    </script>
+</body>
+</html>

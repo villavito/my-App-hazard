@@ -9,9 +9,13 @@
     "userInterfaceStyle": "automatic",
     "newArchEnabled": true,
     "ios": {
-      "supportsTablet": true
+      "supportsTablet": true,
+      "infoPlist": {
+        "NSLocationWhenInUseUsageDescription": "We need your location to share it."
+      }
     },
     "android": {
+      "package": "com.villavito.hazard",
       "adaptiveIcon": {
         "backgroundColor": "#E6F4FE",
         "foregroundImage": "./assets/images/android-icon-foreground.png",
@@ -19,7 +23,8 @@
         "monochromeImage": "./assets/images/android-icon-monochrome.png"
       },
       "edgeToEdgeEnabled": true,
-      "predictiveBackGestureEnabled": false
+      "predictiveBackGestureEnabled": false,
+      "permissions": ["ACCESS_FINE_LOCATION"]
     },
     "web": {
       "output": "static",
@@ -42,19 +47,24 @@
       [
         "expo-image-picker",
         {
-          "photosPermission": "The app needs access to your photos to let you capture hazards.",
-          "cameraPermission": "The app needs access to your camera to capture hazard photos."
+          "photosPermission": "The app needs access to your photos to let you capture incidents.",
+          "cameraPermission": "The app needs access to your camera to capture incident photos."
         }
       ],
       [
         "expo-camera",
         {
-          "cameraPermission": "The app needs access to your camera for real-time hazard capture."
+          "cameraPermission": "The app needs access to your camera for real-time incident capture."
+        }
+      ],
+      [
+        "expo-location",
+        {
+          "locationPermission": "The app needs access to your location to share it with others."
         }
       ]
     ],
     "experiments": {
-      "typedRoutes": true,
       "reactCompiler": true
     }
   }

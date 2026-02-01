@@ -139,7 +139,7 @@ export default function ForgotPasswordScreen() {
   return (
     <SafeAreaView style={styles.container}>
       <View style={styles.header}>
-        <Text style={styles.logo}>Hazard</Text>
+        <Text style={styles.logo}>INCIDENT</Text>
         <Text style={styles.subtitle}>Reset your password</Text>
       </View>
 

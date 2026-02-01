@@ -1,123 +1,60 @@
 rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
-    // Helper functions
-    function isAuthenticated() {
-      return request.auth != null;
-    }
-    
-    function isOwner(userId) {
-      return isAuthenticated() && request.auth.uid == userId;
-    }
-    
-    function isAdmin() {
-      return isAuthenticated() && 
-        request.auth.token.role in ['admin', 'super_admin'];
-    }
-    
-    function isSuperAdmin() {
-      return isAuthenticated() && 
-        request.auth.token.role == 'super_admin';
-    }
-    
-    function isValidUser(userData) {
-      return userData.keys().hasAll(['uid', 'email', 'displayName', 'role', 'createdAt', 'lastLogin']) &&
-        userData.uid == request.auth.uid &&
-        userData.email == request.auth.token.email &&
-        userData.role in ['user', 'admin', 'super_admin'];
-    }
-    
-    function isValidHazard(hazardData) {
-      return hazardData.keys().hasAll(['id', 'userId', 'userEmail', 'imageUrl', 'description', 'location', 'status', 'createdAt']) &&
-        hazardData.userId == request.auth.uid &&
-        hazardData.userEmail == request.auth.token.email &&
-        hazardData.status in ['pending', 'in_progress', 'resolved', 'rejected'];
-    }
-    
-    function isValidReport(reportData) {
-      return reportData.keys().hasAll(['id', 'hazardId', 'userId', 'userEmail', 'comment', 'createdAt']) &&
-        reportData.userId == request.auth.uid &&
-        reportData.userEmail == request.auth.token.email;
-    }
-
     // Users collection - users can only read/write their own profile
     match /users/{userId} {
-      allow read, write: if isOwner(userId);
-      allow create: if isOwner(userId) && isValidUser(resource.data);
-      allow update: if isOwner(userId) && 
-        isValidUser(resource.data) &&
-        resource.data.diff(resource.oldData).affectedKeys().hasOnly(['displayName', 'avatar', 'phone', 'updatedAt']);
-      allow delete: if isOwner(userId) || isSuperAdmin();
+      allow read, write: if request.auth != null && request.auth.uid == userId;
+      allow create: if request.auth != null && 
+        request.auth.uid == userId &&
+        request.resource.data.keys().hasAll(['uid', 'email', 'displayName', 'role', 'createdAt', 'lastLogin']);
     }
     
     // Hazards collection - authenticated users can read/write their own hazards
     match /hazards/{hazardId} {
-      allow read: if isOwner(resource.data.userId) || isAdmin();
-      allow create: if isValidHazard(resource.data);
-      allow update: if isOwner(resource.data.userId) && 
-        resource.data.diff(resource.oldData).affectedKeys().hasOnly(['description', 'location', 'status', 'updatedAt']) &&
-        resource.data.status in ['pending', 'in_progress', 'resolved', 'rejected'];
-      allow delete: if isOwner(resource.data.userId) || isAdmin();
+      allow read: if request.auth != null && 
+        (request.auth.uid == resource.data.userId || 
+         request.auth.token.role in ['admin', 'super_admin']);
+      allow write: if request.auth != null && 
+        request.auth.uid == resource.data.userId;
+      allow create: if request.auth != null && 
+        request.auth.uid == request.resource.data.userId &&
+        request.resource.data.keys().hasAll(['id', 'userId', 'userEmail', 'imageUrl', 'description', 'location', 'status', 'createdAt']);
     }
     
-    // Reports collection - users can report on hazards
+    // Reports collection - public read, authenticated write
     match /reports/{reportId} {
-      allow read: if isOwner(resource.data.userId) || isOwner(resource.data.hazardId) || isAdmin();
-      allow create: if isValidReport(resource.data);
-      allow update: if isOwner(resource.data.userId) && 
-        resource.data.diff(resource.oldData).affectedKeys().hasOnly(['comment', 'updatedAt']);
-      allow delete: if isOwner(resource.data.userId) || isAdmin();
+      allow read: if true;  // Anyone can read reports
+      allow write: if request.auth != null && 
+        request.auth.uid == request.resource.data.userId;
+      allow create: if request.auth != null && 
+        request.resource.data.keys().hasAll(['title', 'description', 'userId', 'createdAt', 'status']);
     }
     
-    // Comments collection - users can comment on hazards
+    // Comments collection - authenticated users can read/write their own comments
     match /comments/{commentId} {
-      allow read: if isAuthenticated();
-      allow create: if isAuthenticated() && 
-        resource.data.keys().hasAll(['id', 'hazardId', 'userId', 'userEmail', 'comment', 'createdAt']) &&
-        resource.data.userId == request.auth.uid &&
-        resource.data.userEmail == request.auth.token.email;
-      allow update: if isOwner(resource.data.userId) && 
-        resource.data.diff(resource.oldData).affectedKeys().hasOnly(['comment', 'updatedAt']);
-      allow delete: if isOwner(resource.data.userId) || isAdmin();
+      allow read: if request.auth != null;
+      allow write: if request.auth != null && 
+        request.auth.uid == resource.data.userId;
+      allow create: if request.auth != null && 
+        request.resource.data.keys().hasAll(['text', 'userId', 'hazardId', 'createdAt']);
     }
     
-    // Notifications collection - users can only read their own notifications
-    match /notifications/{notificationId} {
-      allow read: if resource.data.userId == request.auth.uid;
-      allow create: if isAuthenticated() && 
-        resource.data.userId == request.auth.uid &&
-        resource.data.keys().hasAll(['userId', 'title', 'message', 'type', 'read', 'createdAt']);
-      allow update: if resource.data.userId == request.auth.uid && 
-        resource.data.diff(resource.oldData).affectedKeys().hasOnly(['read', 'updatedAt']);
-      allow delete: if resource.data.userId == request.auth.uid;
+    // Admin-only collection
+    match /admin/{documentId} {
+      allow read, write: if request.auth != null && 
+        request.auth.token.role in ['admin', 'super_admin'];
     }
     
-    // Admin statistics - only admins can access
-    match /admin/{document=**} {
-      allow read, write: if isAdmin();
+    // Analytics/Statistics collection - admin read/write
+    match /statistics/{documentId} {
+      allow read, write: if request.auth != null && 
+        request.auth.token.role in ['admin', 'super_admin'];
     }
     
-    // System settings - only super admin can access
-    match /settings/{document=**} {
-      allow read, write: if isSuperAdmin();
-    }
-    
-    // Audit logs - only super admin can read, system can write
-    match /audit/{auditId} {
-      allow read: if isSuperAdmin();
-      allow create: if false; // Only system can create audit logs
-      allow update, delete: if false; // Audit logs are immutable
-    }
-    
-    // Public collection - anyone can read (for public hazards)
-    match /public/{document=**} {
-      allow read: if true;
-      allow write: if false; // No public writes
-    }
-    
-    // Deny all other access
+    // Global admin access - admins can read/write all documents
     match /{document=**} {
-      allow read, write: if false;
+      allow read, write: if request.auth != null && 
+        request.auth.token.role in ['admin', 'super_admin'];
     }
   }
 }

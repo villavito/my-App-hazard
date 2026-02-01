@@ -109,7 +109,7 @@ export default function HomeScreen() {
     <SafeAreaView style={styles.container}>
       <ScrollView style={styles.scrollView} showsVerticalScrollIndicator={false}>
         <View style={styles.header}>
-          <Text style={styles.title}>Hazard</Text>
+          <Text style={styles.title}>INCIDENT</Text>
           <Text style={styles.subtitle}>Your safety companion</Text>
         </View>
 
