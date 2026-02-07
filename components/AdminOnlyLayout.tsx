@@ -15,7 +15,7 @@ import { useAuth } from '../contexts/AuthContext';
 interface AdminLayoutProps {
   children: React.ReactNode;
   title: string;
-  userRole: 'admin' | 'super_admin';
+  userRole: 'admin';
 }
 
 const { width } = Dimensions.get('window');
@@ -29,44 +29,14 @@ export default function AdminLayout({ children, title, userRole }: AdminLayoutPr
 
   const isWeb = Platform.OS === 'web';
 
-  const getMenuItems = (userRole: 'admin' | 'super_admin') => {
-    const commonItems = [
-      {
-        id: 'dashboard',
-        title: userRole === 'super_admin' ? 'Super Admin Dashboard' : 'Admin Dashboard',
-        icon: 'grid-outline',
-        route: userRole === 'super_admin' ? '/admin/super-admin' : '/admin/dashboard'
-      }
-    ];
-
-    if (userRole === 'super_admin') {
-      return [
-        ...commonItems,
-        {
-          id: 'pending-reports',
-          title: 'Pending Reports',
-          icon: 'time-outline',
-          route: '/admin/pending-reports'
-        },
-        {
-          id: 'report-history',
-          title: 'Report History',
-          icon: 'document-text-outline',
-          route: '/admin/report-history'
-        }
-      ];
-    } else {
-      return [
-        ...commonItems,
-        {
-          id: 'incident-reports',
-          title: 'Incident Reports',
-          icon: 'document-text-outline',
-          route: '/admin/incident-reports'
-        }
-      ];
+  const adminMenuItems = [
+    {
+      id: 'dashboard',
+      title: 'Admin Dashboard',
+      icon: 'grid-outline',
+      route: '/admin/dashboard'
     }
-  };
+  ];
 
   const handleLogout = async () => {
     await signOut();
@@ -156,7 +126,7 @@ export default function AdminLayout({ children, title, userRole }: AdminLayoutPr
       color: isDark ? '#888' : '#666',
     },
     roleBadge: {
-      backgroundColor: userRole === 'super_admin' ? '#FF3B30' : '#007AFF',
+      backgroundColor: '#007AFF',
       paddingHorizontal: 8,
       paddingVertical: 4,
       borderRadius: 8,
@@ -304,9 +274,7 @@ export default function AdminLayout({ children, title, userRole }: AdminLayoutPr
               </View>
               <View style={styles.profileInfo}>
                 <Text style={styles.profileName}>{user?.displayName || 'Admin'}</Text>
-                <Text style={styles.profileRole}>
-                  {userRole === 'super_admin' ? 'Super Admin' : 'Admin'}
-                </Text>
+                <Text style={styles.profileRole}>Admin</Text>
                 <Text style={styles.profileEmail}>{user?.email}</Text>
               </View>
             </View>
@@ -315,7 +283,7 @@ export default function AdminLayout({ children, title, userRole }: AdminLayoutPr
 
         {/* Menu Items */}
         <View style={styles.menuContainer}>
-          {getMenuItems(userRole).map((item) => (
+          {adminMenuItems.map((item) => (
             <TouchableOpacity
               key={item.id}
               style={[

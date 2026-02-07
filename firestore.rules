@@ -1,19 +1,32 @@
 rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
-    // Users collection - users can only read/write their own profile
+    // Helper function to get user role
+    function getUserRole() {
+      return get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role;
+    }
+    
+    // Users collection rules
     match /users/{userId} {
+      // Users can only read and write their own profile
       allow read, write: if request.auth != null && request.auth.uid == userId;
+      
+      // Admins and super admins can read all user profiles
+      allow read: if request.auth != null && getUserRole() in ['admin', 'super_admin'];
+      
+      // Super admins can write all user profiles (for role management)
+      allow write: if request.auth != null && getUserRole() == 'super_admin';
+      
       allow create: if request.auth != null && 
         request.auth.uid == userId &&
         request.resource.data.keys().hasAll(['uid', 'email', 'displayName', 'role', 'createdAt', 'lastLogin']);
     }
     
-    // Hazards collection - authenticated users can read/write their own hazards
+    // Hazards collection - role-based access
     match /hazards/{hazardId} {
       allow read: if request.auth != null && 
         (request.auth.uid == resource.data.userId || 
-         request.auth.token.role in ['admin', 'super_admin']);
+         getUserRole() in ['admin', 'super_admin']);
       allow write: if request.auth != null && 
         request.auth.uid == resource.data.userId;
       allow create: if request.auth != null && 
@@ -21,11 +34,12 @@ service cloud.firestore {
         request.resource.data.keys().hasAll(['id', 'userId', 'userEmail', 'imageUrl', 'description', 'location', 'status', 'createdAt']);
     }
     
-    // Reports collection - public read, authenticated write
+    // Reports collection - role-based access
     match /reports/{reportId} {
       allow read: if true;  // Anyone can read reports
       allow write: if request.auth != null && 
-        request.auth.uid == request.resource.data.userId;
+        (request.auth.uid == resource.data.userId || 
+         getUserRole() in ['admin', 'super_admin']);
       allow create: if request.auth != null && 
         request.resource.data.keys().hasAll(['title', 'description', 'userId', 'createdAt', 'status']);
     }
@@ -42,19 +56,42 @@ service cloud.firestore {
     // Admin-only collection
     match /admin/{documentId} {
       allow read, write: if request.auth != null && 
-        request.auth.token.role in ['admin', 'super_admin'];
+        getUserRole() in ['admin', 'super_admin'];
     }
     
     // Analytics/Statistics collection - admin read/write
     match /statistics/{documentId} {
       allow read, write: if request.auth != null && 
-        request.auth.token.role in ['admin', 'super_admin'];
+        getUserRole() in ['admin', 'super_admin'];
     }
     
-    // Global admin access - admins can read/write all documents
-    match /{document=**} {
+    // Incident reports collection (for pending reports)
+    match /incident_reports/{reportId} {
+      allow read: if request.auth != null && 
+        (request.auth.uid == resource.data.userId || 
+         getUserRole() in ['admin', 'super_admin']);
+      allow create: if request.auth != null && 
+        request.auth.uid == request.resource.data.userId;
+      allow update: if request.auth != null && 
+        getUserRole() in ['admin', 'super_admin'];
+      allow delete: if request.auth != null && 
+        getUserRole() == 'super_admin';
+    }
+    
+    // Notifications collection
+    match /notifications/{notificationId} {
+      allow read: if request.auth != null && 
+        request.auth.uid == resource.data.userId;
+      allow create: if request.auth != null;
+      allow update: if request.auth != null && 
+        request.auth.uid == resource.data.userId &&
+        request.writeFields.keys().hasAll(['read']);
+    }
+    
+    // System settings collection (super admin only)
+    match /system_settings/{settingId} {
       allow read, write: if request.auth != null && 
-        request.auth.token.role in ['admin', 'super_admin'];
+        getUserRole() == 'super_admin';
     }
   }
 }

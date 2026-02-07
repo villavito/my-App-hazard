@@ -70,6 +70,4 @@ export const getFirebaseStorage = () => {
   return storage;
 };
 
-// Export onAuthStateChanged separately
-export { onAuthStateChanged } from 'firebase/auth';
 export default app;

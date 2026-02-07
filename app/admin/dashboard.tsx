@@ -1,7 +1,7 @@
 import { useRouter } from 'expo-router';
 import { Platform, ScrollView, StyleSheet, Text, useColorScheme, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import AdminLayout from '../../components/AdminLayout';
+import AdminOnlyLayout from '../../components/AdminOnlyLayout';
 import { useAuth } from '../../contexts/AuthContext';
 
 export default function AdminDashboard() {
@@ -160,9 +160,9 @@ export default function AdminDashboard() {
 
   if (isWeb) {
     return (
-      <AdminLayout title="Admin Dashboard" userRole="admin">
+      <AdminOnlyLayout title="Admin Dashboard" userRole="admin">
         <DashboardContent />
-      </AdminLayout>
+      </AdminOnlyLayout>
     );
   }
 

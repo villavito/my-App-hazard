@@ -1,0 +1,116 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>View Messages to Super Admin</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            max-width: 800px;
+            margin: 50px auto;
+            padding: 20px;
+            background-color: #f5f5f5;
+        }
+        .container {
+            background: white;
+            padding: 30px;
+            border-radius: 10px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+        }
+        .message {
+            background: #f8f9fa;
+            padding: 15px;
+            border-radius: 8px;
+            margin: 10px 0;
+            border-left: 4px solid #007AFF;
+        }
+        .message-header {
+            font-weight: bold;
+            color: #007AFF;
+            margin-bottom: 5px;
+        }
+        .message-meta {
+            font-size: 12px;
+            color: #666;
+            margin-bottom: 8px;
+        }
+        .message-content {
+            line-height: 1.4;
+        }
+        .btn {
+            background: #007AFF;
+            color: white;
+            border: none;
+            padding: 10px 20px;
+            border-radius: 6px;
+            cursor: pointer;
+            margin: 10px 5px;
+        }
+        .btn:hover {
+            background: #0056b3;
+        }
+        .empty {
+            color: #666;
+            font-style: italic;
+            text-align: center;
+            padding: 20px;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>📧 Messages to Super Admin</h1>
+        
+        <button class="btn" onclick="loadMessages()">Load Messages</button>
+        <button class="btn" onclick="clearMessages()">Clear All Messages</button>
+        
+        <div id="messageList"></div>
+    </div>
+
+    <script>
+        function loadMessages() {
+            try {
+                const messages = JSON.parse(localStorage.getItem('user_notifications') || '[]');
+                const messageList = document.getElementById('messageList');
+                
+                if (messages.length === 0) {
+                    messageList.innerHTML = '<div class="empty">No messages found</div>';
+                    return;
+                }
+                
+                messageList.innerHTML = messages.map((msg, index) => `
+                    <div class="message">
+                        <div class="message-header">Message ${index + 1}</div>
+                        <div class="message-meta">
+                            <strong>From:</strong> ${msg.from?.name || 'Unknown'}<br>
+                            <strong>To:</strong> ${msg.toUser?.name || 'Super Admin'}<br>
+                            <strong>Date:</strong> ${new Date(msg.timestamp).toLocaleString()}<br>
+                            <strong>Status:</strong> ${msg.status || 'sent'}
+                        </div>
+                        <div class="message-content">
+                            <strong>Message:</strong> ${msg.message}
+                        </div>
+                    </div>
+                `).join('');
+                
+                console.log('All messages:', messages);
+            } catch (error) {
+                document.getElementById('messageList').innerHTML = 
+                    '<div style="color: red;">Error loading messages: ' + error.message + '</div>';
+            }
+        }
+
+        function clearMessages() {
+            if (confirm('Are you sure you want to delete all messages? This cannot be undone.')) {
+                localStorage.removeItem('user_notifications');
+                document.getElementById('messageList').innerHTML = 
+                    '<div class="empty">All messages cleared</div>';
+            }
+        }
+
+        // Auto-load messages on page load
+        window.onload = loadMessages;
+    </script>
+</body>
+</html>

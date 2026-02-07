@@ -1,0 +1,361 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Fix Report Data</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            margin: 0;
+            padding: 20px;
+            background-color: #f5f5f5;
+        }
+        .container {
+            max-width: 800px;
+            margin: 0 auto;
+            background-color: white;
+            padding: 30px;
+            border-radius: 12px;
+            box-shadow: 0 4px 20px rgba(0, 0, 0, 0.1);
+        }
+        .header {
+            text-align: center;
+            margin-bottom: 30px;
+        }
+        .title {
+            font-size: 28px;
+            color: #333;
+            margin-bottom: 10px;
+        }
+        .subtitle {
+            font-size: 16px;
+            color: #666;
+        }
+        .section {
+            margin-bottom: 25px;
+            padding: 20px;
+            border: 1px solid #e0e0e0;
+            border-radius: 8px;
+            background-color: #fafafa;
+        }
+        .section-title {
+            font-size: 18px;
+            font-weight: bold;
+            color: #007AFF;
+            margin-bottom: 15px;
+        }
+        .report-item {
+            margin-bottom: 15px;
+            padding: 15px;
+            border: 1px solid #ddd;
+            border-radius: 6px;
+            background-color: white;
+        }
+        .report-header {
+            font-weight: bold;
+            color: #333;
+            margin-bottom: 8px;
+        }
+        .report-detail {
+            margin: 5px 0;
+            font-size: 14px;
+        }
+        .label {
+            font-weight: bold;
+            color: #555;
+            display: inline-block;
+            width: 100px;
+        }
+        .value {
+            color: #333;
+        }
+        .error {
+            color: #FF3B30;
+            font-weight: bold;
+        }
+        .button {
+            background-color: #007AFF;
+            color: white;
+            border: none;
+            padding: 12px 24px;
+            border-radius: 6px;
+            font-size: 16px;
+            cursor: pointer;
+            margin: 10px 5px;
+        }
+        .button:hover {
+            background-color: #0056b3;
+        }
+        .button-danger {
+            background-color: #FF3B30;
+        }
+        .button-danger:hover {
+            background-color: #d32f2f;
+        }
+        .success {
+            color: #4CAF50;
+            font-weight: bold;
+        }
+        .input-group {
+            margin: 10px 0;
+        }
+        .input-group label {
+            display: block;
+            margin-bottom: 5px;
+            font-weight: bold;
+            color: #333;
+        }
+        .input-group input, .input-group textarea {
+            width: 100%;
+            padding: 10px;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+            font-size: 14px;
+            box-sizing: border-box;
+        }
+        .input-group textarea {
+            height: 80px;
+            resize: vertical;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <h1 class="title">🔧 Fix Report Data</h1>
+            <p class="subtitle">Fix typos and update report information in localStorage</p>
+        </div>
+
+        <!-- Current Reports Section -->
+        <div class="section">
+            <h2 class="section-title">📋 Current Reports</h2>
+            <div id="reportsList"></div>
+            <button class="button" onclick="loadReports()">Load Reports</button>
+        </div>
+
+        <!-- Fix Specific Report Section -->
+        <div class="section">
+            <h2 class="section-title">✏️ Fix Specific Report</h2>
+            <div class="input-group">
+                <label>Report ID:</label>
+                <input type="text" id="reportId" placeholder="Enter report ID to fix">
+            </div>
+            <div class="input-group">
+                <label>User Name:</label>
+                <input type="text" id="userName" placeholder="Correct user name">
+            </div>
+            <div class="input-group">
+                <label>Email Address:</label>
+                <input type="email" id="userEmail" placeholder="Correct email address">
+            </div>
+            <div class="input-group">
+                <label>Description:</label>
+                <textarea id="description" placeholder="Correct description"></textarea>
+            </div>
+            <button class="button" onclick="fixReport()">Fix Report</button>
+            <button class="button button-danger" onclick="deleteReport()">Delete Report</button>
+        </div>
+
+        <!-- Auto-Fix Section -->
+        <div class="section">
+            <h2 class="section-title">🚀 Auto-Fix Common Issues</h2>
+            <button class="button" onclick="autoFixEmails()">Fix Email Typos</button>
+            <button class="button" onclick="autoFixDescriptions()">Fix Test Descriptions</button>
+            <button class="button button-danger" onclick="clearAllReports()">Clear All Reports</button>
+        </div>
+
+        <!-- Status -->
+        <div id="status" style="margin-top: 20px; padding: 15px; border-radius: 6px; display: none;"></div>
+    </div>
+
+    <script>
+        function showStatus(message, type = 'success') {
+            const status = document.getElementById('status');
+            status.style.display = 'block';
+            status.innerHTML = message;
+            status.style.backgroundColor = type === 'success' ? '#d4edda' : '#f8d7da';
+            status.style.color = type === 'success' ? '#155724' : '#721c24';
+            status.style.border = `1px solid ${type === 'success' ? '#c3e6cb' : '#f5c6cb'}`;
+            
+            setTimeout(() => {
+                status.style.display = 'none';
+            }, 5000);
+        }
+
+        function loadReports() {
+            try {
+                const reports = JSON.parse(localStorage.getItem('incident_reports') || '[]');
+                const reportsList = document.getElementById('reportsList');
+                
+                if (reports.length === 0) {
+                    reportsList.innerHTML = '<p style="color: #666;">No reports found in localStorage</p>';
+                    return;
+                }
+
+                let html = '';
+                reports.forEach((report, index) => {
+                    const hasErrors = report.user.email.includes('liamorasion') || 
+                                     report.description.includes('fsdfsdfsdfsfsdfsf');
+                    
+                    html += `
+                        <div class="report-item ${hasErrors ? 'error' : ''}">
+                            <div class="report-header">
+                                Report #${index + 1} - ${report.user.name}
+                                ${hasErrors ? '<span style="color: #FF3B30;">⚠️ Needs Fix</span>' : '<span style="color: #4CAF50;">✅ OK</span>'}
+                            </div>
+                            <div class="report-detail">
+                                <span class="label">ID:</span> <span class="value">${report.id}</span>
+                            </div>
+                            <div class="report-detail">
+                                <span class="label">Email:</span> <span class="value ${report.user.email.includes('liamorasion') ? 'error' : ''}">${report.user.email}</span>
+                            </div>
+                            <div class="report-detail">
+                                <span class="label">Status:</span> <span class="value">${report.status}</span>
+                            </div>
+                            <div class="report-detail">
+                                <span class="label">Description:</span> <span class="value ${report.description.includes('fsdfsdfsdfsfsdfsf') ? 'error' : ''}">${report.description}</span>
+                            </div>
+                            <div class="report-detail">
+                                <span class="label">Date:</span> <span class="value">${new Date(report.timestamp).toLocaleString()}</span>
+                            </div>
+                        </div>
+                    `;
+                });
+                
+                reportsList.innerHTML = html;
+                showStatus(`Loaded ${reports.length} reports`, 'success');
+            } catch (error) {
+                showStatus(`Error loading reports: ${error.message}`, 'error');
+            }
+        }
+
+        function fixReport() {
+            try {
+                const reportId = document.getElementById('reportId').value;
+                const userName = document.getElementById('userName').value;
+                const userEmail = document.getElementById('userEmail').value;
+                const description = document.getElementById('description').value;
+
+                if (!reportId) {
+                    showStatus('Please enter a Report ID', 'error');
+                    return;
+                }
+
+                const reports = JSON.parse(localStorage.getItem('incident_reports') || '[]');
+                const reportIndex = reports.findIndex(r => r.id === reportId);
+
+                if (reportIndex === -1) {
+                    showStatus('Report not found', 'error');
+                    return;
+                }
+
+                // Update the report
+                if (userName) reports[reportIndex].user.name = userName;
+                if (userEmail) reports[reportIndex].user.email = userEmail;
+                if (description) reports[reportIndex].description = description;
+
+                localStorage.setItem('incident_reports', JSON.stringify(reports));
+                showStatus('Report updated successfully!', 'success');
+                
+                // Clear form
+                document.getElementById('reportId').value = '';
+                document.getElementById('userName').value = '';
+                document.getElementById('userEmail').value = '';
+                document.getElementById('description').value = '';
+                
+                // Reload reports list
+                loadReports();
+            } catch (error) {
+                showStatus(`Error fixing report: ${error.message}`, 'error');
+            }
+        }
+
+        function deleteReport() {
+            try {
+                const reportId = document.getElementById('reportId').value;
+
+                if (!reportId) {
+                    showStatus('Please enter a Report ID', 'error');
+                    return;
+                }
+
+                const reports = JSON.parse(localStorage.getItem('incident_reports') || '[]');
+                const reportIndex = reports.findIndex(r => r.id === reportId);
+
+                if (reportIndex === -1) {
+                    showStatus('Report not found', 'error');
+                    return;
+                }
+
+                const reportToDelete = reports[reportIndex];
+                reports.splice(reportIndex, 1);
+                localStorage.setItem('incident_reports', JSON.stringify(reports));
+                showStatus(`Deleted report: ${reportToDelete.user.name}`, 'success');
+                
+                // Clear form
+                document.getElementById('reportId').value = '';
+                document.getElementById('userName').value = '';
+                document.getElementById('userEmail').value = '';
+                document.getElementById('description').value = '';
+                
+                // Reload reports list
+                loadReports();
+            } catch (error) {
+                showStatus(`Error deleting report: ${error.message}`, 'error');
+            }
+        }
+
+        function autoFixEmails() {
+            try {
+                const reports = JSON.parse(localStorage.getItem('incident_reports') || '[]');
+                let fixedCount = 0;
+
+                reports.forEach(report => {
+                    if (report.user.email === 'liamorasion@gmail.com') {
+                        report.user.email = 'liamorasion@gmail.com';
+                        fixedCount++;
+                    }
+                });
+
+                localStorage.setItem('incident_reports', JSON.stringify(reports));
+                showStatus(`Fixed ${fixedCount} email typos`, 'success');
+                loadReports();
+            } catch (error) {
+                showStatus(`Error fixing emails: ${error.message}`, 'error');
+            }
+        }
+
+        function autoFixDescriptions() {
+            try {
+                const reports = JSON.parse(localStorage.getItem('incident_reports') || '[]');
+                let fixedCount = 0;
+
+                reports.forEach(report => {
+                    if (report.description.includes('fsdfsdfsdfsfsdfsf')) {
+                        report.description = 'Hazard report - needs review';
+                        fixedCount++;
+                    }
+                });
+
+                localStorage.setItem('incident_reports', JSON.stringify(reports));
+                showStatus(`Fixed ${fixedCount} descriptions`, 'success');
+                loadReports();
+            } catch (error) {
+                showStatus(`Error fixing descriptions: ${error.message}`, 'error');
+            }
+        }
+
+        function clearAllReports() {
+            if (confirm('Are you sure you want to delete ALL reports? This cannot be undone!')) {
+                localStorage.removeItem('incident_reports');
+                showStatus('All reports cleared', 'success');
+                loadReports();
+            }
+        }
+
+        // Auto-load reports on page load
+        window.addEventListener('load', loadReports);
+    </script>
+</body>
+</html>

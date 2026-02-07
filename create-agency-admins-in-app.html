@@ -1,0 +1,248 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Create Agency Admins</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            max-width: 800px;
+            margin: 0 auto;
+            padding: 20px;
+            background-color: #f5f5f5;
+        }
+        .container {
+            background: white;
+            padding: 30px;
+            border-radius: 10px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+        }
+        .btn {
+            background: #007AFF;
+            color: white;
+            border: none;
+            padding: 12px 24px;
+            border-radius: 6px;
+            cursor: pointer;
+            font-size: 16px;
+            margin: 10px 5px;
+        }
+        .btn:hover {
+            background: #0056b3;
+        }
+        .result {
+            margin-top: 20px;
+            padding: 15px;
+            border-radius: 6px;
+            background: #f8f9fa;
+            border-left: 4px solid #007AFF;
+        }
+        .success {
+            border-left-color: #28a745;
+            background: #d4edda;
+        }
+        .error {
+            border-left-color: #dc3545;
+            background: #f8d7da;
+        }
+        .credentials {
+            background: #e9ecef;
+            padding: 15px;
+            border-radius: 6px;
+            margin-top: 15px;
+        }
+        .agency {
+            margin-bottom: 15px;
+            padding: 10px;
+            background: white;
+            border-radius: 6px;
+            border: 1px solid #dee2e6;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>Create Agency Admin Accounts</h1>
+        <p>This will create admin accounts for PNP, Red Cross, BFP, and DOH in the app's localStorage.</p>
+        
+        <button class="btn" onclick="createAgencyAdmins()">Create Agency Admins</button>
+        <button class="btn" onclick="checkExistingUsers()">Check Existing Users</button>
+        <button class="btn" onclick="clearAllUsers()">Clear All Users (Reset)</button>
+        
+        <div id="result"></div>
+        
+        <div class="credentials">
+            <h3>Agency Admin Credentials:</h3>
+            <div class="agency">
+                <strong>🏢 Philippine National Police (PNP)</strong><br>
+                Email: pnp-admin@hazard.local<br>
+                Password: PNPAdmin123!
+            </div>
+            <div class="agency">
+                <strong>🏢 Philippine Red Cross</strong><br>
+                Email: redcross-admin@hazard.local<br>
+                Password: RedCross123!
+            </div>
+            <div class="agency">
+                <strong>🏢 Bureau of Fire Protection (BFP)</strong><br>
+                Email: bfp-admin@hazard.local<br>
+                Password: BFPAdmin123!
+            </div>
+            <div class="agency">
+                <strong>🏢 Department of Health (DOH)</strong><br>
+                Email: doh-admin@hazard.local<br>
+                Password: DOHAdmin123!
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // Get existing users from localStorage
+        const getUsers = () => {
+            try {
+                const users = localStorage.getItem('hazard_local_users');
+                return users ? JSON.parse(users) : [];
+            } catch (error) {
+                console.error('Error getting users:', error);
+                return [];
+            }
+        };
+
+        // Save users to localStorage
+        const saveUsers = (users) => {
+            try {
+                localStorage.setItem('hazard_local_users', JSON.stringify(users));
+            } catch (error) {
+                console.error('Error saving users:', error);
+            }
+        };
+
+        // Generate unique ID
+        const generateUid = () => {
+            return 'local_' + Date.now() + '_' + Math.random().toString(36).substr(2, 9);
+        };
+
+        // Agency admin accounts to create
+        const agencyAdmins = [
+            {
+                email: 'pnp-admin@hazard.local',
+                displayName: 'PNP Admin',
+                password: 'PNPAdmin123!',
+                role: 'admin',
+                agency: 'Philippine National Police',
+                agencyCode: 'PNP'
+            },
+            {
+                email: 'redcross-admin@hazard.local',
+                displayName: 'Red Cross Admin',
+                password: 'RedCross123!',
+                role: 'admin',
+                agency: 'Philippine Red Cross',
+                agencyCode: 'RED_CROSS'
+            },
+            {
+                email: 'bfp-admin@hazard.local',
+                displayName: 'BFP Admin',
+                password: 'BFPAdmin123!',
+                role: 'admin',
+                agency: 'Bureau of Fire Protection',
+                agencyCode: 'BFP'
+            },
+            {
+                email: 'doh-admin@hazard.local',
+                displayName: 'DOH Admin',
+                password: 'DOHAdmin123!',
+                role: 'admin',
+                agency: 'Department of Health',
+                agencyCode: 'DOH'
+            }
+        ];
+
+        // Create agency admin accounts
+        function createAgencyAdmins() {
+            console.log('🔥 Creating agency admin accounts...');
+            
+            const users = getUsers();
+            let createdCount = 0;
+            let skippedCount = 0;
+            
+            agencyAdmins.forEach(adminData => {
+                // Check if user already exists
+                if (users.find(u => u.email.toLowerCase() === adminData.email.toLowerCase())) {
+                    console.log(`⚠️  Admin account already exists: ${adminData.email}`);
+                    skippedCount++;
+                    return;
+                }
+                
+                // Create new admin user
+                const newAdmin = {
+                    uid: generateUid(),
+                    email: adminData.email.toLowerCase(),
+                    displayName: adminData.displayName,
+                    password: adminData.password,
+                    role: adminData.role,
+                    agency: adminData.agency,
+                    agencyCode: adminData.agencyCode,
+                    createdAt: new Date().toISOString(),
+                    lastLogin: new Date().toISOString(),
+                    isActive: true
+                };
+                
+                users.push(newAdmin);
+                createdCount++;
+                console.log(`✅ Created admin account: ${adminData.email}`);
+            });
+            
+            saveUsers(users);
+            
+            const resultDiv = document.getElementById('result');
+            resultDiv.className = 'result success';
+            resultDiv.innerHTML = `
+                <h3>✅ Success!</h3>
+                <p>Created ${createdCount} new agency admin accounts</p>
+                <p>Skipped ${skippedCount} existing accounts</p>
+                <p>Total users in system: ${users.length}</p>
+            `;
+        }
+
+        // Check existing users
+        function checkExistingUsers() {
+            const users = getUsers();
+            const resultDiv = document.getElementById('result');
+            
+            if (users.length === 0) {
+                resultDiv.className = 'result error';
+                resultDiv.innerHTML = '<h3>No users found in the system</h3>';
+                return;
+            }
+            
+            let userList = '<h3>Existing Users:</h3><ul>';
+            users.forEach(user => {
+                userList += `<li><strong>${user.displayName}</strong> (${user.email}) - ${user.role} - ${user.agency || 'No agency'}</li>`;
+            });
+            userList += '</ul>';
+            
+            resultDiv.className = 'result';
+            resultDiv.innerHTML = userList;
+        }
+
+        // Clear all users
+        function clearAllUsers() {
+            if (confirm('Are you sure you want to delete all users? This action cannot be undone.')) {
+                localStorage.removeItem('hazard_local_users');
+                localStorage.removeItem('hazard_current_user');
+                
+                const resultDiv = document.getElementById('result');
+                resultDiv.className = 'result success';
+                resultDiv.innerHTML = '<h3>✅ All users cleared successfully!</h3><p>You can now create fresh admin accounts.</p>';
+            }
+        }
+
+        // Check existing users on page load
+        window.onload = function() {
+            checkExistingUsers();
+        };
+    </script>
+</body>
+</html>

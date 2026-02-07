@@ -1,0 +1,325 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Fix User Name</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            margin: 0;
+            padding: 20px;
+            background-color: #f5f5f5;
+        }
+        .container {
+            max-width: 800px;
+            margin: 0 auto;
+            background-color: white;
+            padding: 30px;
+            border-radius: 12px;
+            box-shadow: 0 4px 20px rgba(0, 0, 0, 0.1);
+        }
+        .header {
+            text-align: center;
+            margin-bottom: 30px;
+        }
+        .title {
+            font-size: 28px;
+            color: #333;
+            margin-bottom: 10px;
+        }
+        .subtitle {
+            font-size: 16px;
+            color: #666;
+        }
+        .section {
+            margin-bottom: 25px;
+            padding: 20px;
+            border: 1px solid #e0e0e0;
+            border-radius: 8px;
+            background-color: #fafafa;
+        }
+        .section-title {
+            font-size: 18px;
+            font-weight: bold;
+            color: #007AFF;
+            margin-bottom: 15px;
+        }
+        .report-item {
+            margin-bottom: 15px;
+            padding: 15px;
+            border: 1px solid #ddd;
+            border-radius: 6px;
+            background-color: white;
+        }
+        .report-header {
+            font-weight: bold;
+            color: #333;
+            margin-bottom: 8px;
+        }
+        .report-detail {
+            margin: 5px 0;
+            font-size: 14px;
+        }
+        .label {
+            font-weight: bold;
+            color: #555;
+            display: inline-block;
+            width: 100px;
+        }
+        .value {
+            color: #333;
+        }
+        .highlight {
+            background-color: #fff3cd;
+            border: 1px solid #ffeaa7;
+            padding: 2px 4px;
+            border-radius: 3px;
+        }
+        .error {
+            color: #FF3B30;
+            font-weight: bold;
+        }
+        .button {
+            background-color: #007AFF;
+            color: white;
+            border: none;
+            padding: 12px 24px;
+            border-radius: 6px;
+            font-size: 16px;
+            cursor: pointer;
+            margin: 10px 5px;
+        }
+        .button:hover {
+            background-color: #0056b3;
+        }
+        .button-success {
+            background-color: #4CAF50;
+        }
+        .button-success:hover {
+            background-color: #45a049;
+        }
+        .input-group {
+            margin: 10px 0;
+        }
+        .input-group label {
+            display: block;
+            margin-bottom: 5px;
+            font-weight: bold;
+            color: #333;
+        }
+        .input-group input {
+            width: 100%;
+            padding: 10px;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+            font-size: 14px;
+            box-sizing: border-box;
+        }
+        .status {
+            margin-top: 20px;
+            padding: 15px;
+            border-radius: 6px;
+            display: none;
+        }
+        .success {
+            background-color: #d4edda;
+            color: #155724;
+            border: 1px solid #c3e6cb;
+        }
+        .error-status {
+            background-color: #f8d7da;
+            color: #721c24;
+            border: 1px solid #f5c6cb;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <h1 class="title">✏️ Fix User Name</h1>
+            <p class="subtitle">Fix "liam orasion" to have only one name</p>
+        </div>
+
+        <!-- Current Reports Section -->
+        <div class="section">
+            <h2 class="section-title">📋 Current Reports with Issue</h2>
+            <div id="reportsList"></div>
+            <button class="button" onclick="loadReports()">Load Reports</button>
+        </div>
+
+        <!-- Fix Section -->
+        <div class="section">
+            <h2 class="section-title">🔧 Fix User Name</h2>
+            <div class="input-group">
+                <label>Choose Correct Name:</label>
+                <input type="text" id="correctName" placeholder="Enter single name (e.g., 'Liam Orasion')">
+            </div>
+            <button class="button button-success" onclick="fixUserName()">Fix User Name</button>
+            <button class="button" onclick="deleteReport()">Delete Report Instead</button>
+        </div>
+
+        <!-- Status -->
+        <div id="status" class="status"></div>
+    </div>
+
+    <script>
+        let targetReportId = null;
+
+        function showStatus(message, type = 'success') {
+            const status = document.getElementById('status');
+            status.style.display = 'block';
+            status.innerHTML = message;
+            status.className = `status ${type === 'success' ? 'success' : 'error-status'}`;
+            
+            setTimeout(() => {
+                status.style.display = 'none';
+            }, 5000);
+        }
+
+        function loadReports() {
+            try {
+                const reports = JSON.parse(localStorage.getItem('incident_reports') || '[]');
+                const reportsList = document.getElementById('reportsList');
+                
+                // Find reports with "liam orasion" in name
+                const problemReports = reports.filter(report => 
+                    report.user.name.toLowerCase().includes('liam') || 
+                    report.user.name.toLowerCase().includes('orasion')
+                );
+
+                if (problemReports.length === 0) {
+                    reportsList.innerHTML = '<p style="color: #666;">No reports with "liam orasion" found</p>';
+                    return;
+                }
+
+                let html = '';
+                problemReports.forEach((report, index) => {
+                    html += `
+                        <div class="report-item">
+                            <div class="report-header">
+                                Report #${index + 1} - ${report.user.name}
+                                <span class="highlight">⚠️ DOUBLE NAME ISSUE</span>
+                            </div>
+                            <div class="report-detail">
+                                <span class="label">ID:</span> <span class="value">${report.id}</span>
+                            </div>
+                            <div class="report-detail">
+                                <span class="label">Email:</span> <span class="value">${report.user.email}</span>
+                            </div>
+                            <div class="report-detail">
+                                <span class="label">Status:</span> <span class="value">${report.status}</span>
+                            </div>
+                            <div class="report-detail">
+                                <span class="label">Description:</span> <span class="value">${report.description}</span>
+                            </div>
+                            <div class="report-detail">
+                                <span class="label">Date:</span> <span class="value">${new Date(report.timestamp).toLocaleString()}</span>
+                            </div>
+                            <button class="button" onclick="selectReport('${report.id}', '${report.user.name}')">Select This Report</button>
+                        </div>
+                    `;
+                });
+                
+                reportsList.innerHTML = html;
+                showStatus(`Found ${problemReports.length} report(s) with double name issue`, 'success');
+            } catch (error) {
+                showStatus(`Error loading reports: ${error.message}`, 'error');
+            }
+        }
+
+        function selectReport(reportId, currentName) {
+            targetReportId = reportId;
+            document.getElementById('correctName').value = currentName.replace(/\s+(or|and)\s+/gi, ' ').trim();
+            showStatus(`Selected report: ${currentName}. Enter the correct single name below.`, 'success');
+            
+            // Scroll to fix section
+            document.querySelector('.section:last-child').scrollIntoView({ behavior: 'smooth' });
+        }
+
+        function fixUserName() {
+            try {
+                const correctName = document.getElementById('correctName').value.trim();
+
+                if (!correctName) {
+                    showStatus('Please enter a correct name', 'error');
+                    return;
+                }
+
+                if (!targetReportId) {
+                    showStatus('Please select a report first', 'error');
+                    return;
+                }
+
+                // Check if name still contains "or" or "and" (indicates multiple names)
+                if (correctName.toLowerCase().includes(' or ') || correctName.toLowerCase().includes(' and ')) {
+                    showStatus('Name should not contain "or" or "and". Use a single name only.', 'error');
+                    return;
+                }
+
+                const reports = JSON.parse(localStorage.getItem('incident_reports') || '[]');
+                const reportIndex = reports.findIndex(r => r.id === targetReportId);
+
+                if (reportIndex === -1) {
+                    showStatus('Report not found', 'error');
+                    return;
+                }
+
+                // Update the user name
+                const oldName = reports[reportIndex].user.name;
+                reports[reportIndex].user.name = correctName;
+
+                localStorage.setItem('incident_reports', JSON.stringify(reports));
+                showStatus(`Fixed user name: "${oldName}" → "${correctName}"`, 'success');
+                
+                // Clear form
+                document.getElementById('correctName').value = '';
+                targetReportId = null;
+                
+                // Reload reports list
+                loadReports();
+            } catch (error) {
+                showStatus(`Error fixing user name: ${error.message}`, 'error');
+            }
+        }
+
+        function deleteReport() {
+            try {
+                if (!targetReportId) {
+                    showStatus('Please select a report first', 'error');
+                    return;
+                }
+
+                if (!confirm('Are you sure you want to delete this report? This action cannot be undone!')) {
+                    return;
+                }
+
+                const reports = JSON.parse(localStorage.getItem('incident_reports') || '[]');
+                const reportIndex = reports.findIndex(r => r.id === targetReportId);
+
+                if (reportIndex === -1) {
+                    showStatus('Report not found', 'error');
+                    return;
+                }
+
+                const deletedReport = reports[reportIndex];
+                reports.splice(reportIndex, 1);
+                localStorage.setItem('incident_reports', JSON.stringify(reports));
+                showStatus(`Deleted report: ${deletedReport.user.name}`, 'success');
+                
+                // Clear form
+                document.getElementById('correctName').value = '';
+                targetReportId = null;
+                
+                // Reload reports list
+                loadReports();
+            } catch (error) {
+                showStatus(`Error deleting report: ${error.message}`, 'error');
+            }
+        }
+
+        // Auto-load reports on page load
+        window.addEventListener('load', loadReports);
+    </script>
+</body>
+</html>

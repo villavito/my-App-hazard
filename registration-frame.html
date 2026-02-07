@@ -1,0 +1,219 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Registration Status Frame</title>
+    <style>
+        body {
+            margin: 0;
+            padding: 0;
+            font-family: Arial, sans-serif;
+            background-color: #f5f5f5;
+        }
+        
+        .frame-container {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background-color: rgba(0, 0, 0, 0.8);
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            z-index: 10000;
+        }
+        
+        .frame-content {
+            background-color: white;
+            padding: 40px;
+            border-radius: 12px;
+            box-shadow: 0 4px 20px rgba(0, 0, 0, 0.3);
+            text-align: center;
+            max-width: 400px;
+            width: 90%;
+        }
+        
+        .success-icon {
+            font-size: 64px;
+            color: #4CAF50;
+            margin-bottom: 20px;
+        }
+        
+        .error-icon {
+            font-size: 64px;
+            color: #FF3B30;
+            margin-bottom: 20px;
+        }
+        
+        .title {
+            font-size: 24px;
+            font-weight: bold;
+            margin-bottom: 10px;
+            color: #333;
+        }
+        
+        .success-title {
+            color: #4CAF50;
+        }
+        
+        .error-title {
+            color: #FF3B30;
+        }
+        
+        .message {
+            font-size: 16px;
+            color: #666;
+            margin-bottom: 20px;
+            line-height: 1.4;
+        }
+        
+        .user-info {
+            background-color: #f8f9fa;
+            padding: 15px;
+            border-radius: 8px;
+            margin: 20px 0;
+            text-align: left;
+        }
+        
+        .user-detail {
+            margin: 5px 0;
+            font-size: 14px;
+        }
+        
+        .user-label {
+            font-weight: bold;
+            color: #333;
+        }
+        
+        .close-btn {
+            background-color: #007AFF;
+            color: white;
+            border: none;
+            padding: 12px 24px;
+            border-radius: 6px;
+            font-size: 16px;
+            cursor: pointer;
+            font-weight: 600;
+        }
+        
+        .close-btn:hover {
+            background-color: #0056b3;
+        }
+        
+        .auto-close {
+            font-size: 12px;
+            color: #999;
+            margin-top: 15px;
+        }
+    </style>
+</head>
+<body>
+    <div class="frame-container" id="frameContainer">
+        <div class="frame-content" id="frameContent">
+            <div id="statusIcon"></div>
+            <h1 id="statusTitle" class="title"></h1>
+            <p id="statusMessage" class="message"></p>
+            
+            <div id="userInfo" class="user-info" style="display: none;">
+                <div class="user-detail">
+                    <span class="user-label">Name:</span>
+                    <span id="userName"></span>
+                </div>
+                <div class="user-detail">
+                    <span class="user-label">Email:</span>
+                    <span id="userEmail"></span>
+                </div>
+                <div class="user-detail">
+                    <span class="user-label">Role:</span>
+                    <span id="userRole"></span>
+                </div>
+            </div>
+            
+            <button class="close-btn" onclick="closeFrame()">Continue</button>
+            <p class="auto-close">This window will close automatically in <span id="countdown">5</span> seconds</p>
+        </div>
+    </div>
+
+    <script>
+        let countdown = 5;
+        let countdownInterval;
+        
+        // Get URL parameters
+        const urlParams = new URLSearchParams(window.location.search);
+        const success = urlParams.get('success') === 'true';
+        const userName = urlParams.get('userName') || 'User';
+        const userEmail = urlParams.get('userEmail') || 'user@example.com';
+        const userRole = urlParams.get('userRole') || 'user';
+        const errorMessage = urlParams.get('error');
+        
+        function showStatus() {
+            const statusIcon = document.getElementById('statusIcon');
+            const statusTitle = document.getElementById('statusTitle');
+            const statusMessage = document.getElementById('statusMessage');
+            const userInfo = document.getElementById('userInfo');
+            
+            if (success) {
+                // Success state
+                statusIcon.innerHTML = '✅';
+                statusTitle.innerHTML = 'Account Created Successfully!';
+                statusTitle.className = 'title success-title';
+                statusMessage.innerHTML = `Your account has been created and you can now log in with your credentials.`;
+                
+                // Show user info
+                userInfo.style.display = 'block';
+                document.getElementById('userName').textContent = userName;
+                document.getElementById('userEmail').textContent = userEmail;
+                document.getElementById('userRole').textContent = userRole;
+                
+            } else if (errorMessage) {
+                // Error state
+                statusIcon.innerHTML = '❌';
+                statusTitle.innerHTML = 'Registration Failed';
+                statusTitle.className = 'title error-title';
+                statusMessage.innerHTML = errorMessage;
+                userInfo.style.display = 'none';
+            } else {
+                // Default state
+                statusIcon.innerHTML = '⚠️';
+                statusTitle.innerHTML = 'Registration Status Unknown';
+                statusTitle.className = 'title';
+                statusMessage.innerHTML = 'Unable to determine registration status.';
+                userInfo.style.display = 'none';
+            }
+        }
+        
+        function closeFrame() {
+            window.close();
+            // Or redirect to login
+            // window.location.href = '/login';
+        }
+        
+        function startCountdown() {
+            countdownInterval = setInterval(() => {
+                countdown--;
+                document.getElementById('countdown').textContent = countdown;
+                
+                if (countdown <= 0) {
+                    clearInterval(countdownInterval);
+                    closeFrame();
+                }
+            }, 1000);
+        }
+        
+        // Initialize
+        document.addEventListener('DOMContentLoaded', function() {
+            showStatus();
+            startCountdown();
+        });
+        
+        // Listen for messages from parent window
+        window.addEventListener('message', function(event) {
+            if (event.data === 'close') {
+                closeFrame();
+            }
+        });
+    </script>
+</body>
+</html>

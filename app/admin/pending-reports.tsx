@@ -10,26 +10,63 @@ interface IncidentReport {
   user: {
     name: string;
     email: string;
-    uid: string;
   };
   description: string;
-  image: string | null;
-  location: { latitude: number; longitude: number } | null;
   timestamp: string;
-  status: 'pending' | 'reviewed' | 'resolved';
-  adminNotes: string | null;
+  status: 'pending' | 'reviewed' | 'declined' | 'resolved';
+  adminNotes?: string;
+  location?: any;
+  image?: string;
+  likedBySuperAdmin?: boolean;
+  superAdminLikeTimestamp?: string;
+  assignedAgency?: string;
 }
+
+// Inline notification function to avoid import issues
+const createIncidentNotification = async (userId: string, title: string, message: string, data?: any) => {
+  try {
+    console.log('📬 Creating notification:', { userId, title, message, data });
+    const notifications = JSON.parse(localStorage.getItem('user_notifications') || '[]');
+    const newNotification = {
+      id: 'notification_' + Date.now() + '_' + Math.random().toString(36).substr(2, 9),
+      userId,
+      title,
+      message,
+      data,
+      timestamp: new Date().toISOString(),
+      read: false
+    };
+    notifications.push(newNotification);
+    localStorage.setItem('user_notifications', JSON.stringify(notifications));
+    console.log('✅ Notification saved:', newNotification.id);
+    return true;
+  } catch (error) {
+    console.error('❌ Error creating notification:', error);
+    return false;
+  }
+};
 
 export default function PendingReportsScreen() {
   const colorScheme = useColorScheme();
   const isDark = colorScheme === 'dark';
   const router = useRouter();
-  const { user } = useAuth();
+  const { user, userRole } = useAuth();
   const [reports, setReports] = useState<IncidentReport[]>([]);
   const [loading, setLoading] = useState(true);
   const [showReachUserModal, setShowReachUserModal] = useState(false);
   const [selectedReport, setSelectedReport] = useState<IncidentReport | null>(null);
   const [notificationMessage, setNotificationMessage] = useState('');
+  const [showAgencyModal, setShowAgencyModal] = useState(false);
+  const [selectedReportForApproval, setSelectedReportForApproval] = useState<IncidentReport | null>(null);
+
+  // Role-based access control: only super_admin can access pending reports
+  if (userRole !== 'super_admin') {
+    return (
+      <SafeAreaView style={{ flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: isDark ? '#0a0a0a' : '#f5f5f5' }}>
+        <Text style={{ color: isDark ? '#fff' : '#000', fontSize: 18 }}>Access Denied: Super Admin Only</Text>
+      </SafeAreaView>
+    );
+  }
 
   useEffect(() => {
     loadPendingReports();
@@ -38,14 +75,19 @@ export default function PendingReportsScreen() {
   const loadPendingReports = () => {
     try {
       setLoading(true);
+      console.log('🔍 Loading pending reports...');
       
       // Get all reports from localStorage
-      const allReports = JSON.parse(localStorage.getItem('incident_reports') || '[]');
+      const allReports: IncidentReport[] = JSON.parse(localStorage.getItem('incident_reports') || '[]');
+      console.log('🔍 Total reports in localStorage:', allReports.length);
+      console.log('🔍 All report statuses:', allReports.map(r => `${r.id}: ${r.status}`));
       
       // Filter only pending reports
       const pendingReports = allReports.filter((report: IncidentReport) => 
         report.status === 'pending'
       );
+      
+      console.log('🔍 Pending reports after filter:', pendingReports.length);
       
       // Sort by timestamp (newest first)
       pendingReports.sort((a: IncidentReport, b: IncidentReport) => 
@@ -54,6 +96,7 @@ export default function PendingReportsScreen() {
       
       setReports(pendingReports);
       console.log(`📋 Loaded ${pendingReports.length} pending reports`);
+      console.log('📋 Pending report IDs:', pendingReports.map(r => r.id));
     } catch (error) {
       console.error('❌ Error loading pending reports:', error);
       Alert.alert('Error', 'Failed to load pending reports');
@@ -135,33 +178,53 @@ export default function PendingReportsScreen() {
     }
   };
 
-  const handleApprove = async (reportId: string) => {
+  const handleApprove = (reportId: string) => {
+    console.log('🔍 Preparing to approve report:', reportId);
+    
+    const report = reports.find(r => r.id === reportId);
+    if (report) {
+      setSelectedReportForApproval(report);
+      setShowAgencyModal(true);
+    } else {
+      Alert.alert('Error', 'Report not found');
+    }
+  };
+
+  const handleAssignAgency = async (agency: string) => {
+    if (!selectedReportForApproval) return;
+
     try {
       // Get all reports from localStorage
       const allReports = JSON.parse(localStorage.getItem('incident_reports') || '[]');
       
       // Find and update the report
-      const reportIndex = allReports.findIndex((r: IncidentReport) => r.id === reportId);
+      const reportIndex = allReports.findIndex((r: IncidentReport) => r.id === selectedReportForApproval.id);
       if (reportIndex !== -1) {
         allReports[reportIndex] = {
           ...allReports[reportIndex],
           status: 'reviewed' as const,
-          adminNotes: 'Approved by admin'
+          adminNotes: `Approved and assigned to ${agency}`,
+          assignedAgency: agency
         };
         
         // Save back to localStorage
         localStorage.setItem('incident_reports', JSON.stringify(allReports));
         
-        console.log('✅ Report approved:', reportId);
-        Alert.alert('Success', 'Report approved successfully');
-        loadPendingReports(); // Refresh the list
+        console.log('✅ Report approved and assigned:', selectedReportForApproval.id);
+        Alert.alert('Success', `Report approved and assigned to ${agency}`);
+        
+        // Refresh list
+        loadPendingReports();
       } else {
         Alert.alert('Error', 'Report not found');
       }
     } catch (error) {
-      console.error('Error approving report:', error);
-      Alert.alert('Error', 'Failed to approve report');
+      console.error('Error assigning agency:', error);
+      Alert.alert('Error', 'Failed to assign agency');
     }
+    
+    setShowAgencyModal(false);
+    setSelectedReportForApproval(null);
   };
 
   const handleDecline = async (reportId: string) => {
@@ -169,7 +232,7 @@ export default function PendingReportsScreen() {
       // Get all reports from localStorage
       const allReports = JSON.parse(localStorage.getItem('incident_reports') || '[]');
       
-      // Find and update the report
+      // Find and update report
       const reportIndex = allReports.findIndex((r: IncidentReport) => r.id === reportId);
       if (reportIndex !== -1) {
         allReports[reportIndex] = {
@@ -183,7 +246,7 @@ export default function PendingReportsScreen() {
         
         console.log('✅ Report declined:', reportId);
         Alert.alert('Success', 'Report declined successfully');
-        loadPendingReports(); // Refresh the list
+        loadPendingReports(); // Refresh list
       } else {
         Alert.alert('Error', 'Report not found');
       }
@@ -193,16 +256,102 @@ export default function PendingReportsScreen() {
     }
   };
 
+  const handleLike = async (reportId: string) => {
+    try {
+      // Get all reports from localStorage
+      const allReports = JSON.parse(localStorage.getItem('incident_reports') || '[]');
+      
+      // Find and update report
+      const reportIndex = allReports.findIndex((r: IncidentReport) => r.id === reportId);
+      if (reportIndex !== -1) {
+        const report = allReports[reportIndex];
+        allReports[reportIndex] = {
+          ...allReports[reportIndex],
+          likedBySuperAdmin: true,
+          superAdminLikeTimestamp: new Date().toISOString()
+        };
+        
+        // Save back to localStorage
+        localStorage.setItem('incident_reports', JSON.stringify(allReports));
+        
+        console.log('❤️ Report liked:', reportId);
+        
+        // Create notification for the user
+        try {
+          await createIncidentNotification(
+            report.user.uid || report.user.email, // Use uid if available, else email
+            '❤️ Report Liked',
+            `Super Admin liked your hazard report: "${report.description.substring(0, 50)}${report.description.length > 50 ? '...' : ''}"`,
+            { reportId: report.id, superAdminLike: true, superAdminLikeTimestamp: allReports[reportIndex].superAdminLikeTimestamp }
+          );
+          console.log('📬 Notification sent to user for liked report');
+        } catch (notificationError) {
+          console.error('❌ Error sending notification:', notificationError);
+          // Don't fail the like operation if notification fails
+        }
+        
+        Alert.alert('Success', 'Report liked successfully');
+        loadPendingReports(); // Refresh list
+      } else {
+        Alert.alert('Error', 'Report not found');
+      }
+    } catch (error) {
+      console.error('Error liking report:', error);
+      Alert.alert('Error', 'Failed to like report');
+    }
+  };
+
+  const handleDelete = async (reportId: string) => {
+    Alert.alert(
+      'Delete Report',
+      'Are you sure you want to delete this report? This action cannot be undone.',
+      [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'Delete',
+          style: 'destructive',
+          onPress: async () => {
+            try {
+              // Get all reports from localStorage
+              const allReports = JSON.parse(localStorage.getItem('incident_reports') || '[]');
+              
+              // Remove the report
+              const updatedReports = allReports.filter((r: IncidentReport) => r.id !== reportId);
+              
+              // Save back to localStorage
+              localStorage.setItem('incident_reports', JSON.stringify(updatedReports));
+              
+              console.log('🗑️ Report deleted:', reportId);
+              Alert.alert('Success', 'Report deleted successfully');
+              loadPendingReports(); // Refresh the list
+            } catch (error) {
+              console.error('Error deleting report:', error);
+              Alert.alert('Error', 'Failed to delete report');
+            }
+          }
+        }
+      ]
+    );
+  };
+
   const renderReport = ({ item }: { item: IncidentReport }) => (
     <View style={[styles.reportCard, { backgroundColor: isDark ? '#2a2a2a' : '#fff' }]}>
       <View style={styles.reportHeader}>
-        <View style={styles.reportInfo}>
-          <Text style={[styles.reportId, { color: isDark ? '#fff' : '#000' }]}>
-            {item.user.name}
-          </Text>
-          <Text style={[styles.reportDate, { color: isDark ? '#888' : '#666' }]}>
-            {formatDate(item.timestamp)}
-          </Text>
+        <View style={{ flexDirection: 'row', alignItems: 'center', marginBottom: 8 }}>
+          <TouchableOpacity 
+            style={styles.likeInHeader} 
+            onPress={() => handleLike(item.id)}
+          >
+            <Text style={styles.likeEmoji}>❤️</Text>
+          </TouchableOpacity>
+          {item.likedBySuperAdmin && (
+            <View style={styles.superAdminLikeNotification}>
+              <Ionicons name="heart" size={16} color="#FF3B30" />
+              <Text style={styles.superAdminLikeText}>
+                Liked by Super Admin {item.superAdminLikeTimestamp ? `• ${formatDate(item.superAdminLikeTimestamp)}` : ''}
+              </Text>
+            </View>
+          )}
         </View>
         <View style={[styles.statusBadge, { backgroundColor: '#FF9500' }]}>
           <Text style={styles.statusText}>Pending</Text>
@@ -219,6 +368,10 @@ export default function PendingReportsScreen() {
             {item.user.email}
           </Text>
         </View>
+
+        <Text style={[styles.reportDate, { color: isDark ? '#888' : '#666' }]}>
+          {formatDate(item.timestamp)}
+        </Text>
 
         <Text style={[styles.description, { color: isDark ? '#fff' : '#000' }]}>
           {item.description}
@@ -253,10 +406,10 @@ export default function PendingReportsScreen() {
           <Text style={styles.actionButtonText}>❌ Decline</Text>
         </TouchableOpacity>
         <TouchableOpacity 
-          style={[styles.actionButton, styles.heartButton]} 
-          onPress={() => handleReachUser(item)}
+          style={[styles.actionButton, styles.deleteButton]} 
+          onPress={() => handleDelete(item.id)}
         >
-          <Text style={styles.actionButtonText}>❤️ Reach User</Text>
+          <Text style={styles.actionButtonText}>🗑️ Delete</Text>
         </TouchableOpacity>
       </View>
     </View>
@@ -313,6 +466,11 @@ export default function PendingReportsScreen() {
     },
     reportInfo: {
       flex: 1,
+    },
+    userNameSection: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      justifyContent: 'flex-start',
     },
     reportId: {
       fontSize: 16,
@@ -386,6 +544,50 @@ export default function PendingReportsScreen() {
     },
     heartButton: {
       backgroundColor: '#FF3B5C',
+    },
+    deleteButton: {
+      backgroundColor: '#8E8E93',
+    },
+    likeButton: {
+      backgroundColor: '#FF3B30',
+    },
+    likeIconContainer: {
+      padding: 8,
+      borderRadius: 20,
+      backgroundColor: 'rgba(255, 59, 48, 0.1)',
+      alignItems: 'center',
+      justifyContent: 'center',
+    },
+    likeEmojiContainer: {
+      padding: 8,
+      alignItems: 'center',
+      justifyContent: 'center',
+    },
+    likeEmoji: {
+      fontSize: 20,
+      color: '#FF3B30',
+    },
+    likeInHeader: {
+      padding: 4,
+      borderRadius: 12,
+      backgroundColor: 'rgba(255, 59, 48, 0.1)',
+      alignItems: 'center',
+      justifyContent: 'center',
+      marginLeft: 10,
+    },
+    superAdminLikeNotification: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      backgroundColor: 'rgba(255, 59, 48, 0.1)',
+      padding: 8,
+      borderRadius: 6,
+      marginTop: 8,
+    },
+    superAdminLikeText: {
+      fontSize: 12,
+      color: '#FF3B30',
+      fontWeight: '600',
+      marginLeft: 4,
     },
     actionButtonText: {
       color: '#fff',
@@ -468,6 +670,26 @@ export default function PendingReportsScreen() {
       fontSize: 16,
       fontWeight: '600',
       textAlign: 'center',
+    },
+    modalSubtitle: {
+      fontSize: 16,
+      color: isDark ? '#ccc' : '#666',
+      marginBottom: 20,
+      textAlign: 'center',
+    },
+    agencyButton: {
+      backgroundColor: isDark ? '#3a3a3a' : '#f8f9fa',
+      padding: 15,
+      borderRadius: 8,
+      marginBottom: 10,
+      alignItems: 'center',
+      borderWidth: 1,
+      borderColor: isDark ? '#555' : '#e0e0e0',
+    },
+    agencyButtonText: {
+      color: isDark ? '#fff' : '#000',
+      fontSize: 16,
+      fontWeight: '600',
     },
     emptyContainer: {
       flex: 1,
@@ -595,6 +817,33 @@ export default function PendingReportsScreen() {
                 <Text style={styles.sendButtonText}>Send Message</Text>
               </TouchableOpacity>
             </View>
+          </View>
+        </View>
+      </Modal>
+
+      {/* Agency Assignment Modal */}
+      <Modal visible={showAgencyModal} animationType="slide" transparent>
+        <View style={styles.modalOverlay}>
+          <View style={styles.modalContent}>
+            <Text style={styles.modalTitle}>Assign Report to Agency</Text>
+            <Text style={styles.modalSubtitle}>Choose which agency to forward this approved report to:</Text>
+            
+            {['Philippine National Police (PNP)', 'Philippine Red Cross', 'Bureau of Fire Protection (BFP)', 'Department of Health (DOH)'].map(agency => (
+              <TouchableOpacity 
+                key={agency} 
+                style={styles.agencyButton} 
+                onPress={() => handleAssignAgency(agency)}
+              >
+                <Text style={styles.agencyButtonText}>{agency}</Text>
+              </TouchableOpacity>
+            ))}
+            
+            <TouchableOpacity 
+              style={styles.cancelButton} 
+              onPress={() => { setShowAgencyModal(false); setSelectedReportForApproval(null); }}
+            >
+              <Text style={styles.cancelButtonText}>Cancel</Text>
+            </TouchableOpacity>
           </View>
         </View>
       </Modal>

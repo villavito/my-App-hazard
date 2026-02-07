@@ -353,3 +353,82 @@ export const initializeDefaultUsers = (): void => {
 
 // Auto-initialize
 initializeDefaultUsers();
+
+// Create agency admins if they don't exist
+export const createAgencyAdmins = (): void => {
+  try {
+    const users = getUsers();
+    
+    const agencyAdmins = [
+      {
+        uid: 'local_pnp_admin',
+        email: 'pnp-admin@hazard.local',
+        displayName: 'PNP Admin',
+        password: 'PNPAdmin123!',
+        role: 'admin' as const,
+        agency: 'Philippine National Police',
+        agencyCode: 'PNP',
+        createdAt: new Date().toISOString(),
+        lastLogin: new Date().toISOString(),
+        isActive: true
+      },
+      {
+        uid: 'local_redcross_admin',
+        email: 'redcross-admin@hazard.local',
+        displayName: 'Red Cross Admin',
+        password: 'RedCross123!',
+        role: 'admin' as const,
+        agency: 'Philippine Red Cross',
+        agencyCode: 'RED_CROSS',
+        createdAt: new Date().toISOString(),
+        lastLogin: new Date().toISOString(),
+        isActive: true
+      },
+      {
+        uid: 'local_bfp_admin',
+        email: 'bfp-admin@hazard.local',
+        displayName: 'BFP Admin',
+        password: 'BFPAdmin123!',
+        role: 'admin' as const,
+        agency: 'Bureau of Fire Protection',
+        agencyCode: 'BFP',
+        createdAt: new Date().toISOString(),
+        lastLogin: new Date().toISOString(),
+        isActive: true
+      },
+      {
+        uid: 'local_doh_admin',
+        email: 'doh-admin@hazard.local',
+        displayName: 'DOH Admin',
+        password: 'DOHAdmin123!',
+        role: 'admin' as const,
+        agency: 'Department of Health',
+        agencyCode: 'DOH',
+        createdAt: new Date().toISOString(),
+        lastLogin: new Date().toISOString(),
+        isActive: true
+      }
+    ];
+    
+    let createdCount = 0;
+    
+    agencyAdmins.forEach(admin => {
+      if (!users.find(u => u.email.toLowerCase() === admin.email.toLowerCase())) {
+        users.push(admin);
+        createdCount++;
+        console.log(`✅ Created agency admin: ${admin.email}`);
+      }
+    });
+    
+    if (createdCount > 0) {
+      saveUsers(users);
+      console.log(`🎉 Created ${createdCount} agency admin accounts`);
+    }
+    
+  } catch (error) {
+    console.error('Error creating agency admins:', error);
+  }
+};
+
+// Auto-create agency admins
+createAgencyAdmins();

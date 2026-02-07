@@ -1,0 +1,309 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Delete Specific Report</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            margin: 0;
+            padding: 20px;
+            background-color: #f5f5f5;
+        }
+        .container {
+            max-width: 800px;
+            margin: 0 auto;
+            background-color: white;
+            padding: 30px;
+            border-radius: 12px;
+            box-shadow: 0 4px 20px rgba(0, 0, 0, 0.1);
+        }
+        .header {
+            text-align: center;
+            margin-bottom: 30px;
+        }
+        .title {
+            font-size: 28px;
+            color: #333;
+            margin-bottom: 10px;
+        }
+        .subtitle {
+            font-size: 16px;
+            color: #666;
+        }
+        .search-section {
+            margin-bottom: 30px;
+            padding: 20px;
+            border: 1px solid #e0e0e0;
+            border-radius: 8px;
+            background-color: #fafafa;
+        }
+        .input-group {
+            margin: 15px 0;
+        }
+        .input-group label {
+            display: block;
+            margin-bottom: 5px;
+            font-weight: bold;
+            color: #333;
+        }
+        .input-group input {
+            width: 100%;
+            padding: 10px;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+            font-size: 14px;
+            box-sizing: border-box;
+        }
+        .button {
+            background-color: #007AFF;
+            color: white;
+            border: none;
+            padding: 12px 24px;
+            border-radius: 6px;
+            font-size: 16px;
+            cursor: pointer;
+            margin: 10px 5px;
+        }
+        .button:hover {
+            background-color: #0056b3;
+        }
+        .button-danger {
+            background-color: #FF3B30;
+        }
+        .button-danger:hover {
+            background-color: #d32f2f;
+        }
+        .reports-list {
+            margin-top: 30px;
+        }
+        .report-item {
+            margin-bottom: 15px;
+            padding: 15px;
+            border: 1px solid #ddd;
+            border-radius: 6px;
+            background-color: white;
+        }
+        .report-header {
+            font-weight: bold;
+            color: #333;
+            margin-bottom: 8px;
+        }
+        .report-detail {
+            margin: 5px 0;
+            font-size: 14px;
+        }
+        .label {
+            font-weight: bold;
+            color: #555;
+            display: inline-block;
+            width: 100px;
+        }
+        .value {
+            color: #333;
+        }
+        .highlight {
+            background-color: #fff3cd;
+            border: 1px solid #ffeaa7;
+            padding: 2px 4px;
+            border-radius: 3px;
+        }
+        .status {
+            margin-top: 20px;
+            padding: 15px;
+            border-radius: 6px;
+            display: none;
+        }
+        .success {
+            background-color: #d4edda;
+            color: #155724;
+            border: 1px solid #c3e6cb;
+        }
+        .error {
+            background-color: #f8d7da;
+            color: #721c24;
+            border: 1px solid #f5c6cb;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <h1 class="title">🗑️ Delete Specific Report</h1>
+            <p class="subtitle">Find and delete the "liam orasion" report from localStorage</p>
+        </div>
+
+        <!-- Search Section -->
+        <div class="search-section">
+            <h3>🔍 Search for Report</h3>
+            <div class="input-group">
+                <label>Search by Name or Email:</label>
+                <input type="text" id="searchInput" placeholder="Enter 'liam orasion' or email to find">
+            </div>
+            <button class="button" onclick="searchReports()">Search Reports</button>
+            <button class="button button-danger" onclick="deleteAllMatchingReports()">Delete All Matching</button>
+        </div>
+
+        <!-- Results Section -->
+        <div id="resultsSection" style="display: none;">
+            <h3>📋 Search Results</h3>
+            <div id="reportsList"></div>
+        </div>
+
+        <!-- Status -->
+        <div id="status" class="status"></div>
+    </div>
+
+    <script>
+        function showStatus(message, type = 'success') {
+            const status = document.getElementById('status');
+            status.style.display = 'block';
+            status.innerHTML = message;
+            status.className = `status ${type}`;
+            
+            setTimeout(() => {
+                status.style.display = 'none';
+            }, 5000);
+        }
+
+        function searchReports() {
+            try {
+                const searchTerm = document.getElementById('searchInput').value.toLowerCase();
+                const reports = JSON.parse(localStorage.getItem('incident_reports') || '[]');
+                const resultsSection = document.getElementById('resultsSection');
+                const reportsList = document.getElementById('reportsList');
+
+                if (!searchTerm) {
+                    showStatus('Please enter a search term', 'error');
+                    return;
+                }
+
+                // Find reports matching "liam orasion" or related emails
+                const matchingReports = reports.filter(report => {
+                    return report.user.name.toLowerCase().includes('liam') || 
+                           report.user.name.toLowerCase().includes('orasion') ||
+                           report.user.email.toLowerCase().includes('liam') ||
+                           report.user.email.toLowerCase().includes('orasion');
+                });
+
+                if (matchingReports.length === 0) {
+                    reportsList.innerHTML = '<p style="color: #666;">No matching reports found</p>';
+                    resultsSection.style.display = 'block';
+                    return;
+                }
+
+                let html = '';
+                matchingReports.forEach((report, index) => {
+                    html += `
+                        <div class="report-item">
+                            <div class="report-header">
+                                Report #${index + 1} - ${report.user.name}
+                                <span class="highlight">⚠️ MATCH FOUND</span>
+                            </div>
+                            <div class="report-detail">
+                                <span class="label">ID:</span> <span class="value">${report.id}</span>
+                            </div>
+                            <div class="report-detail">
+                                <span class="label">Email:</span> <span class="value">${report.user.email}</span>
+                            </div>
+                            <div class="report-detail">
+                                <span class="label">Status:</span> <span class="value">${report.status}</span>
+                            </div>
+                            <div class="report-detail">
+                                <span class="label">Description:</span> <span class="value">${report.description}</span>
+                            </div>
+                            <div class="report-detail">
+                                <span class="label">Date:</span> <span class="value">${new Date(report.timestamp).toLocaleString()}</span>
+                            </div>
+                            <button class="button button-danger" onclick="deleteReport('${report.id}')">Delete This Report</button>
+                        </div>
+                    `;
+                });
+
+                reportsList.innerHTML = html;
+                resultsSection.style.display = 'block';
+                showStatus(`Found ${matchingReports.length} matching report(s)`, 'success');
+            } catch (error) {
+                showStatus(`Error searching reports: ${error.message}`, 'error');
+            }
+        }
+
+        function deleteReport(reportId) {
+            try {
+                if (!confirm('Are you sure you want to delete this report? This action cannot be undone!')) {
+                    return;
+                }
+
+                const reports = JSON.parse(localStorage.getItem('incident_reports') || '[]');
+                const reportIndex = reports.findIndex(r => r.id === reportId);
+
+                if (reportIndex === -1) {
+                    showStatus('Report not found', 'error');
+                    return;
+                }
+
+                const deletedReport = reports[reportIndex];
+                reports.splice(reportIndex, 1);
+                localStorage.setItem('incident_reports', JSON.stringify(reports));
+                showStatus(`Deleted report: ${deletedReport.user.name}`, 'success');
+                
+                // Refresh search results
+                searchReports();
+            } catch (error) {
+                showStatus(`Error deleting report: ${error.message}`, 'error');
+            }
+        }
+
+        function deleteAllMatchingReports() {
+            try {
+                const searchTerm = document.getElementById('searchInput').value.toLowerCase();
+                
+                if (!searchTerm) {
+                    showStatus('Please enter a search term first', 'error');
+                    return;
+                }
+
+                if (!confirm(`Are you sure you want to delete ALL reports matching "${searchTerm}"? This action cannot be undone!`)) {
+                    return;
+                }
+
+                const reports = JSON.parse(localStorage.getItem('incident_reports') || '[]');
+                const matchingReports = reports.filter(report => {
+                    return report.user.name.toLowerCase().includes('liam') || 
+                           report.user.name.toLowerCase().includes('orasion') ||
+                           report.user.email.toLowerCase().includes('liam') ||
+                           report.user.email.toLowerCase().includes('orasion');
+                });
+
+                if (matchingReports.length === 0) {
+                    showStatus('No matching reports found to delete', 'error');
+                    return;
+                }
+
+                // Remove all matching reports
+                const remainingReports = reports.filter(report => {
+                    return !report.user.name.toLowerCase().includes('liam') && 
+                           !report.user.name.toLowerCase().includes('orasion') &&
+                           !report.user.email.toLowerCase().includes('liam') &&
+                           !report.user.email.toLowerCase().includes('orasion');
+                });
+
+                localStorage.setItem('incident_reports', JSON.stringify(remainingReports));
+                showStatus(`Deleted ${matchingReports.length} matching report(s)`, 'success');
+                
+                // Clear search and results
+                document.getElementById('searchInput').value = '';
+                document.getElementById('resultsSection').style.display = 'none';
+            } catch (error) {
+                showStatus(`Error deleting reports: ${error.message}`, 'error');
+            }
+        }
+
+        // Auto-search on page load if there's a known issue
+        window.addEventListener('load', function() {
+            document.getElementById('searchInput').value = 'liam orasion';
+        });
+    </script>
+</body>
+</html>

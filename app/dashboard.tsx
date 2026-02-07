@@ -217,7 +217,7 @@ export default function UserDashboard() {
       backgroundColor: isDark ? '#555' : '#e9ecef',
     },
     sendButton: {
-      backgroundColor: '#007AFF',
+      backgroundColor: '#717477ff',
     },
     cancelButtonText: {
       color: isDark ? '#fff' : '#000',
@@ -330,8 +330,8 @@ export default function UserDashboard() {
             >
               <Ionicons name="chatbubble-outline" size={24} style={styles.cardIcon} />
               <View style={styles.cardContent}>
-                <Text style={styles.cardTitle}>Comment to Admin</Text>
-                <Text style={styles.cardDescription}>Send a message or feedback to the admin</Text>
+                <Text style={styles.cardTitle}>Comment to Super Admin</Text>
+                <Text style={styles.cardDescription}>Send a message or feedback to the super admin</Text>
               </View>
             </TouchableOpacity>
           </View>

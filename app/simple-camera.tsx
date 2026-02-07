@@ -2,8 +2,9 @@ import { Ionicons } from '@expo/vector-icons';
 import { CameraView, useCameraPermissions } from 'expo-camera';
 import { useRouter } from 'expo-router';
 import { useEffect, useRef, useState } from 'react';
-import { Alert, StyleSheet, Text, TouchableOpacity, View, useColorScheme } from 'react-native';
+import { Alert, Platform, StyleSheet, Text, TouchableOpacity, View, useColorScheme } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
+import WebCamera from '../components/WebCamera';
 
 export default function SimpleCameraScreen() {
   const colorScheme = useColorScheme();
@@ -13,6 +14,23 @@ export default function SimpleCameraScreen() {
   const [isCameraReady, setIsCameraReady] = useState(false);
   const [facing, setFacing] = useState<'back' | 'front'>('back');
   const cameraRef = useRef<CameraView>(null);
+
+  // Use WebCamera on web platform
+  if (Platform.OS === 'web') {
+    return (
+      <SafeAreaView style={{ flex: 1, backgroundColor: '#000' }}>
+        <WebCamera
+          onTakePicture={(photo: string) => {
+            console.log('📸 WebCamera photo received, navigating to capture-hazard...');
+            // Navigate to capture-hazard with the image
+            const encodedImage = encodeURIComponent(photo);
+            router.push(`/capture-hazard?image=${encodedImage}`);
+          }}
+          onClose={() => router.back()}
+        />
+      </SafeAreaView>
+    );
+  }
 
   const styles = StyleSheet.create({
     container: {

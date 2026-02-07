@@ -1,0 +1,114 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Delete Specific Message</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            max-width: 600px;
+            margin: 50px auto;
+            padding: 20px;
+            background-color: #f5f5f5;
+        }
+        .container {
+            background: white;
+            padding: 30px;
+            border-radius: 10px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+        }
+        .btn {
+            background: #FF3B30;
+            color: white;
+            border: none;
+            padding: 15px 30px;
+            border-radius: 8px;
+            cursor: pointer;
+            font-size: 16px;
+            font-weight: bold;
+            margin: 10px 0;
+        }
+        .btn:hover {
+            background: #d32f2f;
+        }
+        .success {
+            color: #4CAF50;
+            font-weight: bold;
+            text-align: center;
+            padding: 20px;
+            background: #E8F5E8;
+            border-radius: 8px;
+            margin: 15px 0;
+            font-size: 18px;
+        }
+        .message-preview {
+            background: #f8f9fa;
+            padding: 15px;
+            border-radius: 6px;
+            margin: 15px 0;
+            border-left: 4px solid #FF3B30;
+        }
+        .code {
+            background: #2d3748;
+            color: #e2e8f0;
+            padding: 15px;
+            border-radius: 6px;
+            font-family: monospace;
+            margin: 10px 0;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>🗑️ Delete Message in Code</h1>
+        
+        <div class="message-preview">
+            <strong>Message to delete:</strong><br>
+            "Feb 6, 2026, 01:31 PM. sdsgsdgsd."
+        </div>
+        
+        <div class="code">
+            <strong>JavaScript command to run in browser console:</strong><br><br>
+            localStorage.setItem('user_notifications', JSON.stringify(JSON.parse(localStorage.getItem('user_notifications') || '[]').filter(msg => !msg.message.includes('sdsgsdgsd'))));
+        </div>
+        
+        <button class="btn" onclick="deleteMessage()">
+            🗑️ Delete Message Now
+        </button>
+        
+        <div id="result"></div>
+    </div>
+
+    <script>
+        function deleteMessage() {
+            try {
+                // Get current messages
+                const messages = JSON.parse(localStorage.getItem('user_notifications') || '[]');
+                console.log('Messages before deletion:', messages.length);
+                
+                // Filter out the message containing 'sdsgsdgsd'
+                const filteredMessages = messages.filter(msg => 
+                    !msg.message.includes('sdsgsdgsd')
+                );
+                
+                // Save back to localStorage
+                localStorage.setItem('user_notifications', JSON.stringify(filteredMessages));
+                
+                const deletedCount = messages.length - filteredMessages.length;
+                
+                // Show result
+                document.getElementById('result').innerHTML = 
+                    `<div class="success">✅ Successfully deleted ${deletedCount} message(s)<br>Message "Feb 6, 2026, 01:31 PM. sdsgsdgsd." has been removed.</div>`;
+                
+                console.log('Messages after deletion:', filteredMessages.length);
+                console.log('Deleted message:', 'Feb 6, 2026, 01:31 PM. sdsgsdgsd.');
+                
+            } catch (error) {
+                document.getElementById('result').innerHTML = 
+                    `<div style="color: red; padding: 15px;">❌ Error: ${error.message}</div>`;
+            }
+        }
+    </script>
+</body>
+</html>

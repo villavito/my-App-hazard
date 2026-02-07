@@ -1,0 +1,227 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Check Local Users</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            max-width: 800px;
+            margin: 0 auto;
+            padding: 20px;
+            background-color: #f5f5f5;
+        }
+        .container {
+            background: white;
+            padding: 20px;
+            border-radius: 8px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        }
+        .user-item {
+            background: #f8f9fa;
+            padding: 10px;
+            margin: 10px 0;
+            border-radius: 4px;
+            border-left: 4px solid #007AFF;
+        }
+        .btn {
+            background: #007AFF;
+            color: white;
+            padding: 10px 20px;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+            margin: 5px;
+        }
+        .btn:hover {
+            background: #0056b3;
+        }
+        .btn-danger {
+            background: #dc3545;
+        }
+        .btn-danger:hover {
+            background: #c82333;
+        }
+        .success {
+            color: #28a745;
+            font-weight: bold;
+        }
+        .error {
+            color: #dc3545;
+            font-weight: bold;
+        }
+        .form-group {
+            margin: 15px 0;
+        }
+        .form-group label {
+            display: block;
+            margin-bottom: 5px;
+            font-weight: bold;
+        }
+        .form-group input {
+            width: 100%;
+            padding: 8px;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>Local User Management</h1>
+        
+        <div id="message"></div>
+        
+        <div class="form-group">
+            <h3>Add New User</h3>
+            <label>Email:</label>
+            <input type="email" id="email" placeholder="Enter email">
+            
+            <label>Password:</label>
+            <input type="password" id="password" placeholder="Enter password">
+            
+            <label>Name:</label>
+            <input type="text" id="displayName" placeholder="Enter display name">
+            
+            <label>Role:</label>
+            <select id="role">
+                <option value="user">User</option>
+                <option value="admin">Admin</option>
+                <option value="super_admin">Super Admin</option>
+            </select>
+            
+            <button class="btn" onclick="addUser()">Add User</button>
+        </div>
+        
+        <h3>Existing Users</h3>
+        <button class="btn" onclick="loadUsers()">Refresh Users</button>
+        <button class="btn btn-danger" onclick="clearAllUsers()">Clear All Users</button>
+        
+        <div id="usersList"></div>
+    </div>
+
+    <script>
+        // Local user management functions (copied from localAuthService)
+        const getUsers = () => {
+            try {
+                const users = localStorage.getItem('hazard_local_users');
+                return users ? JSON.parse(users) : [];
+            } catch (error) {
+                console.error('Error getting users from localStorage:', error);
+                return [];
+            }
+        };
+
+        const saveUsers = (users) => {
+            try {
+                localStorage.setItem('hazard_local_users', JSON.stringify(users));
+            } catch (error) {
+                console.error('Error saving users to localStorage:', error);
+            }
+        };
+
+        const generateUid = () => {
+            return 'local_' + Date.now() + '_' + Math.random().toString(36).substr(2, 9);
+        };
+
+        const showMessage = (message, type = 'success') => {
+            const messageDiv = document.getElementById('message');
+            messageDiv.innerHTML = `<div class="${type}">${message}</div>`;
+            setTimeout(() => {
+                messageDiv.innerHTML = '';
+            }, 3000);
+        };
+
+        const addUser = () => {
+            const email = document.getElementById('email').value.trim();
+            const password = document.getElementById('password').value;
+            const displayName = document.getElementById('displayName').value.trim();
+            const role = document.getElementById('role').value;
+
+            if (!email || !password || !displayName) {
+                showMessage('Please fill in all fields', 'error');
+                return;
+            }
+
+            const users = getUsers();
+            
+            // Check if user already exists
+            if (users.find(u => u.email.toLowerCase() === email.toLowerCase())) {
+                showMessage('An account with this email already exists', 'error');
+                return;
+            }
+
+            // Create new user
+            const newUser = {
+                uid: generateUid(),
+                email: email.toLowerCase(),
+                displayName: displayName.trim(),
+                role: role,
+                createdAt: new Date().toISOString(),
+                lastLogin: new Date().toISOString(),
+                isActive: true,
+                password: password
+            };
+
+            users.push(newUser);
+            saveUsers(users);
+
+            // Clear form
+            document.getElementById('email').value = '';
+            document.getElementById('password').value = '';
+            document.getElementById('displayName').value = '';
+
+            showMessage(`User ${email} created successfully!`, 'success');
+            loadUsers();
+        };
+
+        const deleteUser = (email) => {
+            if (confirm(`Are you sure you want to delete user ${email}?`)) {
+                const users = getUsers();
+                const filteredUsers = users.filter(u => u.email !== email);
+                saveUsers(filteredUsers);
+                showMessage(`User ${email} deleted successfully!`, 'success');
+                loadUsers();
+            }
+        };
+
+        const clearAllUsers = () => {
+            if (confirm('Are you sure you want to delete all users? This action cannot be undone.')) {
+                localStorage.removeItem('hazard_local_users');
+                localStorage.removeItem('hazard_current_user');
+                showMessage('All users cleared successfully!', 'success');
+                loadUsers();
+            }
+        };
+
+        const loadUsers = () => {
+            const users = getUsers();
+            const usersList = document.getElementById('usersList');
+            
+            if (users.length === 0) {
+                usersList.innerHTML = '<p>No users found in local storage.</p>';
+                return;
+            }
+
+            let html = '';
+            users.forEach(user => {
+                html += `
+                    <div class="user-item">
+                        <strong>${user.displayName}</strong> (${user.email})<br>
+                        Role: ${user.role} | UID: ${user.uid}<br>
+                        Created: ${new Date(user.createdAt).toLocaleString()}<br>
+                        Active: ${user.isActive ? 'Yes' : 'No'}<br>
+                        <button class="btn btn-danger" onclick="deleteUser('${user.email}')">Delete</button>
+                    </div>
+                `;
+            });
+
+            usersList.innerHTML = html;
+        };
+
+        // Load users on page load
+        loadUsers();
+    </script>
+</body>
+</html>

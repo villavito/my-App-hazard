@@ -1,0 +1,133 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Delete Messages to Michael Villavito</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            max-width: 600px;
+            margin: 50px auto;
+            padding: 20px;
+            background-color: #f5f5f5;
+        }
+        .container {
+            background: white;
+            padding: 30px;
+            border-radius: 10px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+        }
+        .btn {
+            background: #FF3B30;
+            color: white;
+            border: none;
+            padding: 12px 24px;
+            border-radius: 6px;
+            cursor: pointer;
+            font-size: 16px;
+            margin: 10px 5px;
+        }
+        .btn:hover {
+            background: #d32f2f;
+        }
+        .success {
+            color: #4CAF50;
+            font-weight: bold;
+            margin-top: 15px;
+        }
+        .error {
+            color: #f44336;
+            font-weight: bold;
+            margin-top: 15px;
+        }
+        .message-preview {
+            background: #f8f9fa;
+            padding: 10px;
+            border-radius: 5px;
+            margin: 10px 0;
+            border-left: 4px solid #007AFF;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>🗑️ Delete Messages to Michael Villavito</h1>
+        
+        <h3>Current Messages to Michael Villavito:</h3>
+        <div id="messageList"></div>
+        
+        <button class="btn" onclick="deleteMessages()">Delete All Messages to Michael Villavito</button>
+        <button class="btn" onclick="viewAllMessages()">View All Messages</button>
+        
+        <div id="result"></div>
+    </div>
+
+    <script>
+        function displayMessages() {
+            const messages = JSON.parse(localStorage.getItem('user_notifications') || '[]');
+            const michaelMessages = messages.filter(msg => 
+                msg.toUser && msg.toUser.name === 'Michael Villavito'
+            );
+            
+            const messageList = document.getElementById('messageList');
+            
+            if (michaelMessages.length === 0) {
+                messageList.innerHTML = '<p style="color: #666;">No messages found to Michael Villavito</p>';
+            } else {
+                messageList.innerHTML = michaelMessages.map((msg, index) => `
+                    <div class="message-preview">
+                        <strong>Message ${index + 1}:</strong><br>
+                        <em>To: ${msg.toUser.name}</em><br>
+                        <em>Date: ${new Date(msg.timestamp).toLocaleString()}</em><br>
+                        <strong>Content:</strong> ${msg.message.substring(0, 100)}${msg.message.length > 100 ? '...' : ''}
+                    </div>
+                `).join('');
+            }
+        }
+
+        function deleteMessages() {
+            try {
+                const messages = JSON.parse(localStorage.getItem('user_notifications') || '[]');
+                const originalCount = messages.length;
+                
+                // Filter out all messages to Michael Villavito
+                const filteredMessages = messages.filter(msg => 
+                    !(msg.toUser && msg.toUser.name === 'Michael Villavito')
+                );
+                
+                // Save back to localStorage
+                localStorage.setItem('user_notifications', JSON.stringify(filteredMessages));
+                
+                const deletedCount = originalCount - filteredMessages.length;
+                
+                document.getElementById('result').innerHTML = `
+                    <div class="success">
+                        ✅ Successfully deleted ${deletedCount} message(s) to Michael Villavito!
+                        <br>Original count: ${originalCount}, Remaining: ${filteredMessages.length}
+                    </div>
+                `;
+                
+                // Refresh display
+                displayMessages();
+                
+            } catch (error) {
+                document.getElementById('result').innerHTML = `
+                    <div class="error">
+                        ❌ Error deleting messages: ${error.message}
+                    </div>
+                `;
+            }
+        }
+
+        function viewAllMessages() {
+            const messages = JSON.parse(localStorage.getItem('user_notifications') || '[]');
+            console.log('All messages:', messages);
+            alert(`Total messages in system: ${messages.length}\nCheck console for full details.`);
+        }
+
+        // Display messages on page load
+        displayMessages();
+    </script>
+</body>
+</html>

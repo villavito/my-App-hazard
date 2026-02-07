@@ -18,6 +18,8 @@ interface IncidentReport {
   timestamp: string;
   status: 'pending' | 'reviewed' | 'resolved' | 'declined';
   adminNotes: string | null;
+  likedBySuperAdmin?: boolean;
+  superAdminLikeTimestamp?: string;
 }
 
 export default function MyReportsScreen() {
@@ -107,9 +109,55 @@ export default function MyReportsScreen() {
     });
   };
 
+  const handleSuperAdminLike = (reportId: string) => {
+    try {
+      // Get all reports from localStorage
+      const allReports = JSON.parse(localStorage.getItem('incident_reports') || '[]');
+      
+      // Update the report with super admin like
+      const updatedReports = allReports.map((report: IncidentReport) => {
+        if (report.id === reportId) {
+          return {
+            ...report,
+            likedBySuperAdmin: true,
+            superAdminLikeTimestamp: new Date().toISOString()
+          };
+        }
+        return report;
+      });
+      
+      // Save back to localStorage
+      localStorage.setItem('incident_reports', JSON.stringify(updatedReports));
+      
+      // Update local state
+      setReports(prev => prev.map(report => 
+        report.id === reportId 
+          ? { ...report, likedBySuperAdmin: true, superAdminLikeTimestamp: new Date().toISOString() }
+          : report
+      ));
+      
+      // Show notification
+      Alert.alert(
+        '👍 Super Admin Liked!',
+        'The Super Admin has liked your report and appreciates your contribution to community safety.',
+        [{ text: 'OK' }]
+      );
+      
+    } catch (error) {
+      console.error('Error updating super admin like:', error);
+      Alert.alert('Error', 'Failed to update like status');
+    }
+  };
+
   const handleReachAdmin = (report: IncidentReport) => {
     setSelectedReport(report);
     setNotificationMessage(`Hi ${report.user.name}, I'm reviewing your incident report submitted on ${formatDate(report.timestamp)}. I wanted to reach out personally about this matter. Thank you for bringing this to our attention. ❤️`);
+    setShowReachAdminModal(true);
+  };
+
+  const handleMessageSuperAdmin = (report: IncidentReport) => {
+    setSelectedReport(report);
+    setNotificationMessage(`  ${formatDate(report.timestamp)}. ${report.description.substring(0, 100)}${report.description.length > 100 ? '...' : ''}.`);
     setShowReachAdminModal(true);
   };
 
@@ -256,6 +304,15 @@ export default function MyReportsScreen() {
           </View>
         )}
         
+        {item.likedBySuperAdmin && (
+          <View style={styles.superAdminLikeNotification}>
+            <Ionicons name="heart" size={16} color="#FF3B30" />
+            <Text style={styles.superAdminLikeText}>
+              Liked by Super Admin {item.superAdminLikeTimestamp ? `• ${formatDate(item.superAdminLikeTimestamp)}` : ''}
+            </Text>
+          </View>
+        )}
+        
         {item.status === 'pending' && isAdminOrSuperAdmin && (
           <TouchableOpacity 
             style={styles.reachAdminButton} 
@@ -263,6 +320,28 @@ export default function MyReportsScreen() {
           >
             <Ionicons name="heart" size={20} color="#fff" />
             <Text style={styles.reachAdminButtonText}>Reach Admin</Text>
+          </TouchableOpacity>
+        )}
+        
+        {/* Message Super Admin Button for regular users */}
+        {!isAdminOrSuperAdmin && (
+          <TouchableOpacity 
+            style={styles.messageSuperAdminButton} 
+            onPress={() => handleMessageSuperAdmin(item)}
+          >
+            <Ionicons name="mail-outline" size={20} color="#fff" />
+            <Text style={styles.messageSuperAdminButtonText}>Message Super Admin</Text>
+          </TouchableOpacity>
+        )}
+        
+        {/* Super Admin Like Button */}
+        {user?.role === 'super_admin' && !item.likedBySuperAdmin && (
+          <TouchableOpacity 
+            style={styles.superAdminLikeButton} 
+            onPress={() => handleSuperAdminLike(item.id)}
+          >
+            <Ionicons name="heart" size={20} color="#FF3B30" />
+            <Text style={styles.superAdminLikeButtonText}>Like Report</Text>
           </TouchableOpacity>
         )}
         
@@ -562,6 +641,55 @@ export default function MyReportsScreen() {
       fontWeight: '600',
       textAlign: 'center',
     },
+    superAdminLikeNotification: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      backgroundColor: isDark ? '#FF3B3020' : '#FFE5E5',
+      padding: 8,
+      borderRadius: 6,
+      marginTop: 8,
+      marginBottom: 8,
+    },
+    superAdminLikeText: {
+      fontSize: 12,
+      color: '#FF3B30',
+      fontWeight: '600',
+      marginLeft: 4,
+    },
+    superAdminLikeButton: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      justifyContent: 'center',
+      backgroundColor: '#fff',
+      borderWidth: 1,
+      borderColor: '#FF3B30',
+      borderRadius: 6,
+      paddingVertical: 8,
+      paddingHorizontal: 12,
+      marginTop: 8,
+    },
+    superAdminLikeButtonText: {
+      color: '#FF3B30',
+      fontSize: 14,
+      fontWeight: '600',
+      marginLeft: 6,
+    },
+    messageSuperAdminButton: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      justifyContent: 'center',
+      backgroundColor: '#007AFF',
+      borderRadius: 6,
+      paddingVertical: 8,
+      paddingHorizontal: 12,
+      marginTop: 8,
+    },
+    messageSuperAdminButtonText: {
+      color: '#fff',
+      fontSize: 14,
+      fontWeight: '600',
+      marginLeft: 6,
+    },
   });
 
   if (loading) {
@@ -599,12 +727,6 @@ export default function MyReportsScreen() {
             <Text style={styles.emptyDescription}>
               You haven't submitted any incident reports yet. Start by reporting an incident to see it here.
             </Text>
-            <TouchableOpacity 
-              style={styles.submitButton} 
-              onPress={() => router.push('/capture-hazard')}
-            >
-              <Text style={styles.submitButtonText}>Submit First Report</Text>
-            </TouchableOpacity>
           </View>
         ) : (
           <FlatList
@@ -627,7 +749,7 @@ export default function MyReportsScreen() {
         <View style={styles.modalOverlay}>
           <View style={styles.modalContent}>
             <View style={styles.modalHeader}>
-              <Text style={styles.modalTitle}>❤️ Reach Admin</Text>
+              <Text style={styles.modalTitle}>Message Super Admin</Text>
               <TouchableOpacity 
                 style={styles.modalCloseButton} 
                 onPress={() => setShowReachAdminModal(false)}
@@ -637,7 +759,7 @@ export default function MyReportsScreen() {
             </View>
 
             <Text style={styles.modalDescription}>
-              Send a heartfelt message to the admin about this pending report. Your care and attention will help ensure this incident gets reviewed promptly.
+              Send a message to the Super Admin about your incident report. Your message will be reviewed and you'll receive a response about your report.
             </Text>
 
             <Text style={[{ color: isDark ? '#fff' : '#000', marginBottom: 8, fontWeight: '600' }]}>
@@ -647,7 +769,7 @@ export default function MyReportsScreen() {
               style={styles.textInput}
               value={notificationMessage}
               onChangeText={setNotificationMessage}
-              placeholder="Type your message to the admin..."
+              placeholder="Type your message to the Super Admin..."
               placeholderTextColor={isDark ? '#888' : '#999'}
               multiline
             />
