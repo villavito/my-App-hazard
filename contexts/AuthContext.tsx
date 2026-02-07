@@ -1,26 +1,148 @@
-import React, { createContext, useContext, useEffect, useState } from "react";
-import {
-  createLocalUser,
-  resetLocalPassword,
-  signInLocalUser,
-  signOutLocalUser
-} from '../services/localAuthService';
+import { createUserWithEmailAndPassword, signOut as firebaseSignOut, onAuthStateChanged, sendPasswordResetEmail, signInWithEmailAndPassword, updateProfile } from 'firebase/auth';
+import { doc, getDoc, setDoc } from 'firebase/firestore';
+import React, { createContext, useCallback, useContext, useEffect, useMemo, useState } from "react";
+import { auth, db } from '../config/firebase';
+
+type UserRole = 'user' | 'admin' | 'super_admin';
+
+interface LocalUser {
+  uid: string;
+  email: string;
+  displayName: string;
+  role: UserRole;
+  createdAt: string;
+  lastLogin: string;
+  isActive: boolean;
+  avatar?: string;
+  phone?: string;
+  password?: string;
+}
+
+interface LocalAuthResult {
+  success: boolean;
+  user?: LocalUser;
+  error?: string;
+}
+
+// Local auth helpers
+const getUsers = (): LocalUser[] => {
+  try {
+    const users = localStorage.getItem('hazard_local_users');
+    return users ? JSON.parse(users) : [];
+  } catch (error) {
+    console.error('Error getting users from localStorage:', error);
+    return [];
+  }
+};
+
+const saveUsers = (users: LocalUser[]): void => {
+  try {
+    localStorage.setItem('hazard_local_users', JSON.stringify(users));
+  } catch (error) {
+    console.error('Error saving users to localStorage:', error);
+  }
+};
+
+const getCurrentUser = (): LocalUser | null => {
+  try {
+    const currentUser = localStorage.getItem('hazard_current_user');
+    return currentUser ? JSON.parse(currentUser) : null;
+  } catch (error) {
+    console.error('Error getting current user from localStorage:', error);
+    return null;
+  }
+};
+
+const saveCurrentUser = (user: LocalUser | null): void => {
+  try {
+    if (user) {
+      localStorage.setItem('hazard_current_user', JSON.stringify(user));
+    } else {
+      localStorage.removeItem('hazard_current_user');
+    }
+  } catch (error) {
+    console.error('Error saving current user to localStorage:', error);
+  }
+};
+
+const signInLocalUser = async (email: string, password: string): Promise<LocalAuthResult> => {
+  try {
+    console.log('🔍 Signing in local user:', email);
+    
+    const users = getUsers();
+    
+    // Find user by email
+    const user = users.find(u => u.email.toLowerCase() === email.toLowerCase());
+    
+    if (!user) {
+      return { success: false, error: 'No account found with this email' };
+    }
+    
+    // Check password (in a real app, you'd compare hashed passwords)
+    if (user.password !== password) {
+      return { success: false, error: 'Incorrect password' };
+    }
+    
+    // Check if user is active
+    if (!user.isActive) {
+      return { success: false, error: 'This account has been disabled' };
+    }
+    
+    // Update last login
+    user.lastLogin = new Date().toISOString();
+    const userIndex = users.findIndex(u => u.uid === user.uid);
+    users[userIndex] = user;
+    saveUsers(users);
+    
+    // Remove password before returning
+    const { password: _, ...userWithoutPassword } = user;
+    
+    // Save current user
+    saveCurrentUser(userWithoutPassword as LocalUser);
+    
+    console.log('✅ Local sign in successful:', userWithoutPassword);
+    
+    return { success: true, user: userWithoutPassword as LocalUser };
+    
+  } catch (error: any) {
+    console.error('❌ Local sign in error:', error);
+    return { success: false, error: error.message || 'Failed to sign in' };
+  }
+};
+
+const signOutLocalUser = async (): Promise<LocalAuthResult> => {
+  try {
+    console.log('🔚 Signing out local user');
+    
+    saveCurrentUser(null);
+    
+    console.log('✅ Local sign out successful');
+    return { success: true };
+    
+  } catch (error: any) {
+    console.error('❌ Local sign out error:', error);
+    return { success: false, error: error.message || 'Failed to sign out' };
+  }
+};
 
 interface User {
   email: string;
   displayName: string;
   uid: string;
-  role?: 'user' | 'admin' | 'super_admin';
+  role?: UserRole;
 }
+
+type AuthResult = { success: boolean; user?: User; error?: string };
+type ForgotPasswordResult = { success: boolean; error?: string };
 
 interface AuthContextProps {
   user: User | null;
-  userRole: any;
+  userRole: UserRole | null;
   loading: boolean;
-  signIn: (email: string, password: string) => Promise<{success: boolean, user?: User, error?: string}>;
-  signUp: (email: string, password: string, name: string, role?: string) => Promise<{success: boolean, user?: User, error?: string}>;
+  signIn: (email: string, password: string) => Promise<AuthResult>;
+  signUp: (email: string, password: string, name: string, role?: UserRole) => Promise<AuthResult>;
   signOut: () => Promise<void>;
-  forgotPassword: (email: string) => Promise<{success: boolean, error?: string}>;
+  forgotPassword: (email: string) => Promise<ForgotPasswordResult>;
 }
 
 const AuthContext = createContext<AuthContextProps>({
@@ -35,120 +157,125 @@ const AuthContext = createContext<AuthContextProps>({
 
 export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const [user, setUser] = useState<User | null>(null);
-  const [userRole, setUserRole] = useState<any>(null);
+  const [userRole, setUserRole] = useState<UserRole | null>(null);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    // Check for existing user session on mount
-    checkUserSession();
+    const unsubscribe = onAuthStateChanged(auth, async (firebaseUser) => {
+      if (firebaseUser) {
+        try {
+          const userDoc = await getDoc(doc(db, 'users', firebaseUser.uid));
+          const role = userDoc.exists() ? userDoc.data()?.role : 'user';
+          setUser({
+            email: firebaseUser.email!,
+            displayName: firebaseUser.displayName || '',
+            uid: firebaseUser.uid,
+            role: role as 'user' | 'admin' | 'super_admin'
+          });
+          setUserRole(role);
+        } catch (error) {
+          console.error('Error fetching user role:', error);
+          setUser(null);
+          setUserRole(null);
+        }
+      } else {
+        setUser(null);
+        setUserRole(null);
+      }
+      setLoading(false);
+    });
+
+    return unsubscribe;
   }, []);
 
-  const checkUserSession = async () => {
-    try {
-      console.log('🔍 Checking user session...');
-      
-      // Check if user data exists in localStorage (for web) or AsyncStorage (for mobile)
-      if (typeof window !== 'undefined') {
-        const storedUser = localStorage.getItem('hazard_user');
-        const storedRole = localStorage.getItem('hazard_userRole');
-        
-        if (storedUser && storedRole) {
-          const userData = JSON.parse(storedUser);
-          const roleData = JSON.parse(storedRole);
-          
-          console.log('✅ Found stored user session:', userData);
-          setUser(userData);
-          setUserRole(roleData);
+  const signIn = useCallback(async (email: string, password: string): Promise<AuthResult> => {
+    if (typeof window !== 'undefined') {
+      // Use local auth on web
+      try {
+        const localResult = await signInLocalUser(email, password);
+        if (localResult.success && localResult.user) {
+          // Map LocalUser to User
+          const mappedUser: User = {
+            email: localResult.user.email,
+            displayName: localResult.user.displayName,
+            uid: localResult.user.uid,
+            role: localResult.user.role
+          };
+          // Update state manually for local auth
+          setUser(mappedUser);
+          setUserRole(localResult.user.role);
+          return { success: true, user: mappedUser };
         } else {
-          console.log('❌ No stored user session found');
+          return { success: false, error: localResult.error || 'Local sign in failed' };
         }
+      } catch (localError: any) {
+        console.error('Local auth error:', localError);
+        return { success: false, error: localError.message || 'Local auth failed' };
       }
-      
-      setLoading(false);
-    } catch (error) {
-      console.error('Session check error:', error);
-      setLoading(false);
+    } else {
+      // Use Firebase on mobile
+      try {
+        await signInWithEmailAndPassword(auth, email, password);
+        return { success: true };
+      } catch (error: any) {
+        console.error('Firebase sign in error:', error);
+        return { success: false, error: error.message };
+      }
     }
-  };
+  }, []);
 
-  const signIn = async (email: string, password: string) => {
+  const signUp = useCallback(async (email: string, password: string, name: string, role: UserRole = 'user'): Promise<AuthResult> => {
     try {
-      const result = await signInLocalUser(email, password);
-      if (result.success && result.user) {
-        setUser({
-          email: result.user.email,
-          displayName: result.user.displayName,
-          uid: result.user.uid,
-          role: result.user.role
-        });
-        setUserRole(result.user.role);
-        
-        // Store in localStorage for persistence
-        if (typeof window !== 'undefined') {
-          localStorage.setItem('hazard_user', JSON.stringify(result.user));
-          localStorage.setItem('hazard_userRole', JSON.stringify(result.user.role));
-        }
-      }
-      return result;
-    } catch (error: any) {
-      console.error('Sign in error:', error);
-      return { success: false, error: error.message };
-    }
-  };
-
-  const signUp = async (email: string, password: string, name: string, role: string = 'admin') => {
-    try {
-      const result = await createLocalUser(email, password, name, role);
-      if (result.success && result.user) {
-        setUser({
-          email: result.user.email,
-          displayName: result.user.displayName,
-          uid: result.user.uid,
-          role: result.user.role
-        });
-        setUserRole(result.user.role);
-        
-        // Store in localStorage for persistence
-        if (typeof window !== 'undefined') {
-          localStorage.setItem('hazard_user', JSON.stringify(result.user));
-          localStorage.setItem('hazard_userRole', JSON.stringify(result.user.role));
-        }
-      }
-      return result;
+      const userCredential = await createUserWithEmailAndPassword(auth, email, password);
+      await updateProfile(userCredential.user, { displayName: name });
+      await setDoc(doc(db, 'users', userCredential.user.uid), {
+        email,
+        displayName: name,
+        role
+      });
+      return { success: true };
     } catch (error: any) {
       console.error('Sign up error:', error);
       return { success: false, error: error.message };
     }
-  };
+  }, []);
 
-  const signOut = async () => {
+  const signOut = useCallback(async (): Promise<void> => {
     try {
-      await signOutLocalUser();
-      setUser(null);
-      setUserRole(null);
-      
-      // Clear localStorage
-      if (typeof window !== 'undefined') {
-        localStorage.removeItem('hazard_user');
-        localStorage.removeItem('hazard_userRole');
-      }
+      await firebaseSignOut(auth);
     } catch (error: any) {
-      console.error('Sign out error:', error);
+      console.error('Firebase sign out error:', error);
+      // If on web and API key invalid, fallback to local auth
+      if (Platform.OS === 'web' && error.message.includes('auth/api-key-not-valid')) {
+        console.log('Falling back to local sign out for web');
+        try {
+          await localAuth.signOutLocalUser();
+          setUser(null);
+          setUserRole(null);
+        } catch (localError: any) {
+          console.error('Local sign out fallback error:', localError);
+        }
+      }
     }
-  };
+  }, []);
 
-  const forgotPassword = async (email: string) => {
+  const forgotPassword = useCallback(async (email: string): Promise<ForgotPasswordResult> => {
     try {
-      const result = await resetLocalPassword(email);
-      return result;
+      await sendPasswordResetEmail(auth, email);
+      return { success: true };
     } catch (error: any) {
       console.error('Forgot password error:', error);
       return { success: false, error: error.message };
     }
-  };
+  }, []);
+
+  const value = useMemo(
+    () => ({ user, userRole, loading, signIn, signUp, signOut, forgotPassword }),
+    [user, userRole, loading, signIn, signUp, signOut, forgotPassword]
+  );
 
   return (
-    <AuthContext.Provider value={{ user, userRole, loading, signIn, signUp, signOut, forgotPassword }}>
+    <AuthContext.Provider value={value}>
       {children}
     </AuthContext.Provider>
   );
