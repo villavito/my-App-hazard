@@ -1,7 +1,7 @@
 import { Ionicons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
 import { useState } from 'react';
-import { Alert, StyleSheet, Text, TextInput, TouchableOpacity, useColorScheme, View } from 'react-native';
+import { ActivityIndicator, Alert, StyleSheet, Text, TextInput, TouchableOpacity, useColorScheme, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { signInUser } from '../services/authService';
 
@@ -64,6 +64,9 @@ export default function LoginScreen() {
       alignItems: 'center',
       marginTop: 20,
     },
+    buttonDisabled: {
+      opacity: 0.7,
+    },
     buttonText: {
       color: '#fff',
       fontSize: 18,
@@ -113,6 +116,7 @@ export default function LoginScreen() {
   });
 
   const handleLogin = async () => {
+    console.log('handleLogin invoked', { email });
     if (!email || !password) {
       Alert.alert('Error', 'Please fill in all fields');
       return;
@@ -145,7 +149,7 @@ export default function LoginScreen() {
   return (
     <SafeAreaView style={styles.container}>
       <View style={styles.header}>
-        <Text style={styles.logo}>Hazard</Text>
+        <Text style={styles.logo}>Incident</Text>
         <Text style={styles.subtitle}>Sign in to continue</Text>
       </View>
 
@@ -190,8 +194,17 @@ export default function LoginScreen() {
           </TouchableOpacity>
         </View>
 
-        <TouchableOpacity style={styles.button} onPress={handleLogin}>
-          <Text style={styles.buttonText}>Sign In</Text>
+        <TouchableOpacity
+          style={[styles.button, loading ? styles.buttonDisabled : null]}
+          onPress={handleLogin}
+          onPressIn={() => console.log('Sign In button pressed (onPressIn)', { email })}
+          disabled={loading}
+        >
+          {loading ? (
+            <ActivityIndicator color="#fff" />
+          ) : (
+            <Text style={styles.buttonText}>Sign In</Text>
+          )}
         </TouchableOpacity>
 
         <View style={styles.signupContainer}>

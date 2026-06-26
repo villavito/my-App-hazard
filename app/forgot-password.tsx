@@ -1,7 +1,17 @@
 import { useRouter } from 'expo-router';
-import { sendPasswordResetEmail } from 'firebase/auth';
+import { FirebaseError } from 'firebase/app';
+import { sendPasswordResetEmail } from 'firebase/auth/react-native';
 import { useState } from 'react';
-import { Alert, StyleSheet, Text, TextInput, TouchableOpacity, useColorScheme, View } from 'react-native';
+import {
+  ActivityIndicator,
+  Alert,
+  StyleSheet,
+  Text,
+  TextInput,
+  TouchableOpacity,
+  useColorScheme,
+  View,
+} from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { auth } from '../config/firebase';
 
@@ -64,6 +74,9 @@ export default function ForgotPasswordScreen() {
       alignItems: 'center',
       marginTop: 20,
     },
+    buttonDisabled: {
+      opacity: 0.7,
+    },
     buttonText: {
       color: '#fff',
       fontSize: 18,
@@ -99,21 +112,23 @@ export default function ForgotPasswordScreen() {
   });
 
   const handleResetPassword = async () => {
-    if (!email) {
+    const trimmedEmail = email.trim().toLowerCase();
+
+    if (!trimmedEmail) {
       Alert.alert('Error', 'Please enter your email address');
       return;
     }
 
     // Basic email validation
     const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-    if (!emailRegex.test(email)) {
+    if (!emailRegex.test(trimmedEmail)) {
       Alert.alert('Error', 'Please enter a valid email address');
       return;
     }
 
     setLoading(true);
     try {
-      await sendPasswordResetEmail(auth, email);
+      await sendPasswordResetEmail(auth, trimmedEmail);
       Alert.alert(
         'Reset Email Sent',
         'A password reset link has been sent to your email. Please check your inbox and follow the instructions.',
@@ -124,10 +139,12 @@ export default function ForgotPasswordScreen() {
           },
         ]
       );
-    } catch (error: any) {
+    } catch (error) {
       let errorMessage = 'Failed to send reset email';
-      
-      switch (error.code) {
+
+      const errorCode = error instanceof FirebaseError ? error.code : undefined;
+
+      switch (errorCode) {
         case 'auth/user-not-found':
           errorMessage = 'No account found with this email address';
           break;
@@ -137,10 +154,15 @@ export default function ForgotPasswordScreen() {
         case 'auth/network-request-failed':
           errorMessage = 'Network error. Please check your connection';
           break;
+        case 'auth/too-many-requests':
+          errorMessage = 'Too many reset attempts. Please wait a few minutes and try again';
+          break;
         default:
-          errorMessage = error.message;
+          if (error instanceof Error && error.message) {
+            errorMessage = error.message;
+          }
       }
-      
+
       Alert.alert('Error', errorMessage);
     } finally {
       setLoading(false);
@@ -150,14 +172,14 @@ export default function ForgotPasswordScreen() {
   return (
     <SafeAreaView style={styles.container}>
       <View style={styles.header}>
-        <Text style={styles.logo}>Hazard</Text>
+        <Text style={styles.logo}>Incident</Text>
         <Text style={styles.subtitle}>Reset your password</Text>
       </View>
 
       <View style={styles.form}>
         <View style={styles.infoBox}>
           <Text style={styles.infoText}>
-            Enter your email address and we'll send you a link to reset your password.
+            Enter your email address and we will send you a link to reset your password.
           </Text>
         </View>
 
@@ -176,13 +198,15 @@ export default function ForgotPasswordScreen() {
         </View>
 
         <TouchableOpacity 
-          style={styles.button} 
+          style={[styles.button, loading && styles.buttonDisabled]}
           onPress={handleResetPassword}
           disabled={loading}
         >
-          <Text style={styles.buttonText}>
-            {loading ? 'Sending...' : 'Send Reset Email'}
-          </Text>
+          {loading ? (
+            <ActivityIndicator color="#fff" />
+          ) : (
+            <Text style={styles.buttonText}>Send Reset Email</Text>
+          )}
         </TouchableOpacity>
 
         <View style={styles.backContainer}>

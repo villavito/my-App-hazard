@@ -3,6 +3,7 @@ import { useRouter } from 'expo-router';
 import { ScrollView, StyleSheet, Text, TouchableOpacity, useColorScheme, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useAuth } from '../contexts/AuthContext';
+import { signOutUser } from '../services/authService';
 
 export default function UserDashboard() {
   const colorScheme = useColorScheme();
@@ -110,8 +111,8 @@ export default function UserDashboard() {
   });
 
   const handleLogout = async () => {
-    // TODO: Implement logout logic
-    router.push('/login');
+    await signOutUser();
+    router.replace('/login');
   };
 
   const features: Array<{
@@ -121,8 +122,8 @@ export default function UserDashboard() {
   }> = [
     {
       icon: 'camera-outline',
-      title: 'Capture the Hazard',
-      description: 'Report and document safety hazards',
+      title: 'SAP THE INCIDENT',
+      description: 'Report and document safety incidents',
     },
   ];
 
@@ -140,7 +141,7 @@ export default function UserDashboard() {
           <View style={styles.section}>
             <Text style={styles.sectionTitle}>Quick Actions</Text>
             {features.map((feature, index) => (
-              <TouchableOpacity key={index} style={styles.card} onPress={() => router.push('/capture-hazard')}>
+              <TouchableOpacity key={index} style={styles.card} onPress={() => router.push('/capture-incident')}>
                 <Ionicons name={feature.icon as keyof typeof Ionicons.glyphMap} size={24} style={styles.cardIcon} />
                 <View style={styles.cardContent}>
                   <Text style={styles.cardTitle}>{feature.title}</Text>

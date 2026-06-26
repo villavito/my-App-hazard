@@ -91,7 +91,7 @@ export default function HomeScreen() {
     {
       icon: 'shield-checkmark-outline',
       title: 'Safety First',
-      description: 'Advanced hazard detection and prevention systems',
+      description: 'Advanced incident detection and prevention systems',
     },
     {
       icon: 'analytics-outline',
@@ -109,9 +109,9 @@ export default function HomeScreen() {
     <SafeAreaView style={styles.container}>
       <ScrollView style={styles.scrollView} showsVerticalScrollIndicator={false}>
         <View style={styles.header}>
-          <Text style={styles.title}>Hazard</Text>
-          <Text style={styles.subtitle}>Your safety companion</Text>
-        </View>
+              <Text style={styles.title}>Incident</Text>
+              <Text style={styles.subtitle}>Your safety companion</Text>
+            </View>
 
         <View style={styles.section}>
           <TouchableOpacity style={styles.button} onPress={() => router.push('/login')}>

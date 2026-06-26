@@ -1,11 +1,11 @@
 {
   "expo": {
-    "name": "hazard",
-    "slug": "hazard",
+    "name": "INCIDENT REPORTING APP",
+    "slug": "incident-reporting-app",
     "version": "1.0.0",
     "orientation": "portrait",
     "icon": "./assets/images/icon.png",
-    "scheme": "hazard",
+    "scheme": "incident-reporting-app",
     "userInterfaceStyle": "automatic",
     "newArchEnabled": true,
     "ios": {
@@ -42,14 +42,20 @@
       [
         "expo-image-picker",
         {
-          "photosPermission": "The app needs access to your photos to let you capture hazards.",
-          "cameraPermission": "The app needs access to your camera to capture hazard photos."
+          "photosPermission": "The app needs access to your photos to let you capture incidents.",
+          "cameraPermission": "The app needs access to your camera to capture incident photos."
         }
       ],
       [
         "expo-camera",
         {
-          "cameraPermission": "The app needs access to your camera for real-time hazard capture."
+          "cameraPermission": "The app needs access to your camera for real-time incident capture."
+        }
+      ],
+      [
+        "expo-location",
+        {
+          "locationWhenInUsePermission": "Allow $(PRODUCT_NAME) to use your location when reporting incidents."
         }
       ]
     ],

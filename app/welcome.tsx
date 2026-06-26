@@ -57,6 +57,8 @@ export default function WelcomeScreen() {
             ],
           },
         ]}
+        // Allow touches to pass through the animated overlay when invisible
+        pointerEvents="none"
       >
         <Animated.View style={styles.splashCircle} />
       </Animated.View>
@@ -75,12 +77,12 @@ export default function WelcomeScreen() {
           ],
         }}
       >
-        <Text style={styles.title}>Welcome to Your Landing Page</Text>
+        <Text style={styles.title}>Welcome please</Text>
         <Text style={styles.subtitle}>This is where users land after clicking Get Started</Text>
         
         <TouchableOpacity 
           style={styles.loginButton}
-          onPress={() => router.push('/(auth)/login')}
+          onPress={() => router.push('/login')}
         >
           <Text style={styles.loginButtonText}>Login</Text>
         </TouchableOpacity>

@@ -3,32 +3,32 @@ import { Stack } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
 import { StyleSheet, View } from 'react-native';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
+import { AuthProvider } from '../contexts/AuthContext';
 
 export default function RootLayout() {
 
   return (
     <SafeAreaProvider>
-      <StatusBar style="light" />
-      <LinearGradient
-        colors={['#000000', '#092e6d', '#403673', '#ffffff']}
-        style={styles.background}
-        start={{ x: 0, y: 0 }}
-        end={{ x: 1, y: 1 }}
-      >
-        <View style={styles.overlay}>
-          <Stack
-            screenOptions={{
-              headerShown: false,
-              contentStyle: { backgroundColor: 'transparent' },
-              animation: 'fade',
-              gestureEnabled: true,
-            }}
-          >
-            <Stack.Screen name="index" />
-            <Stack.Screen name="welcome" />
-          </Stack>
-        </View>
-      </LinearGradient>
+      <AuthProvider>
+        <StatusBar style="light" />
+        <LinearGradient
+          colors={['#000000', '#092e6d', '#403673', '#ffffff']}
+          style={styles.background}
+          start={{ x: 0, y: 0 }}
+          end={{ x: 1, y: 1 }}
+        >
+          <View style={styles.overlay}>
+            <Stack
+              screenOptions={{
+                headerShown: false,
+                contentStyle: { backgroundColor: 'transparent' },
+                animation: 'fade',
+                gestureEnabled: true,
+              }}
+            />
+          </View>
+        </LinearGradient>
+      </AuthProvider>
     </SafeAreaProvider>
   );
 }

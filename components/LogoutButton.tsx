@@ -1,7 +1,7 @@
 import { router } from 'expo-router';
 import { useState } from 'react';
 import { StyleSheet, Text, TouchableOpacity } from 'react-native';
-// import { signOut, auth } from '../config/firebase';
+import { signOutUser } from '../services/authService';
 
 export default function LogoutButton() {
   const [loading, setLoading] = useState(false);
@@ -10,12 +10,8 @@ export default function LogoutButton() {
     setLoading(true);
     
     try {
-      // Firebase logout logic - uncomment after installing Firebase
-      // await signOut(auth);
-      console.log('User logged out');
-      
-      // Navigate to landing page after logout
-      router.push('/landing');
+      await signOutUser();
+      router.replace('/login');
     } catch (error: any) {
       console.error('Logout error:', error);
     } finally {

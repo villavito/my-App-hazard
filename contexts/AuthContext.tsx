@@ -1,14 +1,15 @@
-import { onAuthStateChanged, User } from 'firebase/auth';
 import React, { createContext, useContext, useEffect, useState } from 'react';
+import { onAuthStateChanged } from 'firebase/auth/react-native';
 import { auth } from '../config/firebase';
 import { getUserRole, UserRole } from '../services/authService';
 
 interface AuthContextType {
-  user: User | null;
+  user: any;
   userRole: UserRole | null;
   loading: boolean;
   isAdmin: boolean;
   isSuperAdmin: boolean;
+  refreshUserRole: () => Promise<void>;
 }
 
 const AuthContext = createContext<AuthContextType>({
@@ -17,6 +18,7 @@ const AuthContext = createContext<AuthContextType>({
   loading: true,
   isAdmin: false,
   isSuperAdmin: false,
+  refreshUserRole: async () => {},
 });
 
 export const useAuth = () => {
@@ -28,21 +30,31 @@ export const useAuth = () => {
 };
 
 export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
-  const [user, setUser] = useState<User | null>(null);
+  const [user, setUser] = useState<any>(null);
   const [userRole, setUserRole] = useState<UserRole | null>(null);
   const [loading, setLoading] = useState(true);
+
+  const refreshUserRole = async () => {
+    if (!auth.currentUser) {
+      setUserRole(null);
+      return;
+    }
+
+    const role = await getUserRole(auth.currentUser.uid);
+    setUserRole(role);
+  };
 
   useEffect(() => {
     const unsubscribe = onAuthStateChanged(auth, async (firebaseUser) => {
       setUser(firebaseUser);
-      
+
       if (firebaseUser) {
         const role = await getUserRole(firebaseUser.uid);
         setUserRole(role);
       } else {
         setUserRole(null);
       }
-      
+
       setLoading(false);
     });
 
@@ -59,6 +71,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       loading,
       isAdmin,
       isSuperAdmin,
+      refreshUserRole,
     }}>
       {children}
     </AuthContext.Provider>

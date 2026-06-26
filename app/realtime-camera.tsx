@@ -144,7 +144,7 @@ export default function RealtimeCameraScreen() {
       if (photo.uri) {
         // Navigate back with the photo URI
         router.replace({
-          pathname: '/capture-hazard',
+          pathname: '/capture-incident',
           params: { photoUri: photo.uri }
         });
       }

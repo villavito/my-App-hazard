@@ -57,32 +57,32 @@ export const updateUserLastLogin = async (uid: string) => {
   }
 };
 
-// Hazard Services
-export const createHazardReport = async (hazardData: any) => {
+// Incident Services
+export const createIncidentReport = async (incidentData: any) => {
   try {
-    const hazardId = `${hazardData.userId}_${Date.now()}`;
-    const hazardRef = doc(db, 'hazards', hazardId);
-    
-    const completeHazardData = {
-      ...hazardData,
-      id: hazardId,
+    const incidentId = `${incidentData.userId}_${Date.now()}`;
+    const incidentRef = doc(db, 'incidents', incidentId);
+
+    const completeIncidentData = {
+      ...incidentData,
+      id: incidentId,
       status: 'pending',
       createdAt: serverTimestamp(),
       updatedAt: serverTimestamp()
     };
-    
-    await setDoc(hazardRef, completeHazardData);
-    return { success: true, data: completeHazardData };
+
+    await setDoc(incidentRef, completeIncidentData);
+    return { success: true, data: completeIncidentData };
   } catch (error) {
-    console.error('Error creating hazard report:', error);
+    console.error('Error creating incident report:', error);
     return { success: false, error };
   }
 };
 
-export const getUserHazards = async (userId: string) => {
+export const getUserIncidents = async (userId: string) => {
   try {
     const hazardsQuery = query(
-      collection(db, 'hazards'),
+      collection(db, 'incidents'),
       where('userId', '==', userId),
       orderBy('createdAt', 'desc')
     );
@@ -95,15 +95,15 @@ export const getUserHazards = async (userId: string) => {
     
     return { success: true, data: hazards };
   } catch (error) {
-    console.error('Error getting user hazards:', error);
+    console.error('Error getting user incidents:', error);
     return { success: false, error };
   }
 };
 
-export const getAllHazards = async (limitCount = 50) => {
+export const getAllIncidents = async (limitCount = 50) => {
   try {
     const hazardsQuery = query(
-      collection(db, 'hazards'),
+      collection(db, 'incidents'),
       orderBy('createdAt', 'desc'),
       limit(limitCount)
     );
@@ -116,32 +116,87 @@ export const getAllHazards = async (limitCount = 50) => {
     
     return { success: true, data: hazards };
   } catch (error) {
-    console.error('Error getting all hazards:', error);
+    console.error('Error getting all incidents:', error);
     return { success: false, error };
   }
 };
 
-export const updateHazardStatus = async (hazardId: string, status: string) => {
+export const getIncidentsByAgency = async (agency: string, limitCount = 50) => {
   try {
-    const hazardRef = doc(db, 'hazards', hazardId);
-    await updateDoc(hazardRef, {
+    const incidentsQuery = query(
+      collection(db, 'incidents'),
+      where('agency', '==', agency)
+    );
+    const querySnapshot = await getDocs(incidentsQuery);
+
+    const incidents = querySnapshot.docs
+      .map((docSnap) => ({
+        id: docSnap.id,
+        ...docSnap.data(),
+      }))
+      .sort((a: any, b: any) => {
+        const aTime = a.createdAt?.toDate?.()?.getTime() ?? 0;
+        const bTime = b.createdAt?.toDate?.()?.getTime() ?? 0;
+        return bTime - aTime;
+      })
+      .slice(0, limitCount);
+
+    return { success: true, data: incidents };
+  } catch (error) {
+    console.error('Error getting incidents by agency:', error);
+    return { success: false, error };
+  }
+};
+
+export const getAgencyIncidentCounts = async () => {
+  try {
+    const allIncidentsResult = await getAllIncidents(1000);
+    if (!allIncidentsResult.success) {
+      return { success: false, error: allIncidentsResult.error };
+    }
+
+    const incidents = allIncidentsResult.data ?? [];
+    const counts: Record<string, number> = {
+      PNP: 0,
+      BFP: 0,
+      RHU: 0,
+      BDRRMC: 0,
+    };
+
+    incidents.forEach((incident: any) => {
+      if (incident.agency && counts[incident.agency] !== undefined) {
+        counts[incident.agency] += 1;
+      }
+    });
+
+    return { success: true, data: counts };
+  } catch (error) {
+    console.error('Error getting agency incident counts:', error);
+    return { success: false, error };
+  }
+};
+
+export const updateIncidentStatus = async (incidentId: string, status: string) => {
+  try {
+    const incidentRef = doc(db, 'incidents', incidentId);
+    await updateDoc(incidentRef, {
       status,
       updatedAt: serverTimestamp()
     });
     return { success: true };
   } catch (error) {
-    console.error('Error updating hazard status:', error);
+    console.error('Error updating incident status:', error);
     return { success: false, error };
   }
 };
 
-export const deleteHazardReport = async (hazardId: string) => {
+export const deleteIncidentReport = async (incidentId: string) => {
   try {
-    const hazardRef = doc(db, 'hazards', hazardId);
-    await deleteDoc(hazardRef);
+    const incidentRef = doc(db, 'incidents', incidentId);
+    await deleteDoc(incidentRef);
     return { success: true };
   } catch (error) {
-    console.error('Error deleting hazard report:', error);
+    console.error('Error deleting incident report:', error);
     return { success: false, error };
   }
 };
@@ -179,14 +234,14 @@ export const updateUserRole = async (uid: string, role: string) => {
 };
 
 // Statistics Services
-export const getHazardStatistics = async () => {
+export const getIncidentStatistics = async () => {
   try {
-    const allHazardsResult = await getAllHazards(1000);
-    if (!allHazardsResult.success) {
-      return { success: false, error: allHazardsResult.error };
+    const allIncidentsResult = await getAllIncidents(1000);
+    if (!allIncidentsResult.success) {
+      return { success: false, error: allIncidentsResult.error };
     }
-    
-    const hazards = allHazardsResult.data;
+
+    const hazards = allIncidentsResult.data ?? [];
     
     const stats = {
       total: hazards.length,
@@ -203,7 +258,7 @@ export const getHazardStatistics = async () => {
     
     return { success: true, data: stats };
   } catch (error) {
-    console.error('Error getting hazard statistics:', error);
+    console.error('Error getting incident statistics:', error);
     return { success: false, error };
   }
 };

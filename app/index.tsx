@@ -119,7 +119,7 @@ export default function App() {
           }]}>
             <GradientText style={styles.title}>CAPTURE</GradientText>
             <GradientText style={[styles.title, { color: 'hsla(284, 93%, 76%, 1.00)' }]}>THE</GradientText>
-            <GradientText style={styles.title}>HAZARDS</GradientText>
+            <GradientText style={styles.title}>INCIDENT</GradientText>
           </Animated.View>
 
           {/* Paragraphs */}
@@ -144,7 +144,7 @@ export default function App() {
                 outputRange: [50, 0]
               })
             }]
-          }]}>identify hazards around you</Animated.Text>
+          }]}>identify incidents around you</Animated.Text>
           
           {/* Hazard Icons */}
           <Animated.View style={[styles.iconsRow, {
@@ -190,7 +190,7 @@ export default function App() {
             <Animated.View style={[styles.loginContainer, {
               opacity: loginAnim,
             }]}>
-              <TouchableOpacity onPress={() => router.push('/(auth)/login')}>
+              <TouchableOpacity onPress={() => router.push('/login')}>
                 <Text style={styles.loginText}>
                   Already have an account?{' '}
                   <Text style={styles.loginLink}>Login</Text>

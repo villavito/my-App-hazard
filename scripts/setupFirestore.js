@@ -4,13 +4,13 @@ const { getAuth, signInWithEmailAndPassword } = require('firebase/auth');
 
 // Firebase configuration
 const firebaseConfig = {
-  apiKey: "AIzaSyBxFSpEKq5Fv7vRyHaY7_G9MeoaA-mppNE",
-  authDomain: "thehazard-5f87e.firebaseapp.com",
-  projectId: "thehazard-5f87e",
-  storageBucket: "thehazard-5f87e.firebasestorage.app",
-  messagingSenderId: "364711835242",
-  appId: "1:364711835242:web:efeeb73cee5e41aa007c13",
-  measurementId: "G-1WXP5HPNBZ"
+  apiKey: "AIzaSyCJgfoIbGkAKTya1MX7ho670fi-fFbFVlo",
+  authDomain: "incident-4a5a6.firebaseapp.com",
+  projectId: "incident-4a5a6",
+  storageBucket: "incident-4a5a6.firebasestorage.app",
+  messagingSenderId: "833458585716",
+  appId: "1:833458585716:web:f65978e5ee2e0f2ff35121",
+  measurementId: "G-C4BHGRV4CB"
 };
 
 // Initialize Firebase
@@ -22,7 +22,7 @@ const auth = getAuth(app);
 const sampleUsers = [
   {
     uid: "admin_sample_123",
-    email: "admin@hazard.com",
+    email: "admin@incident.com",
     displayName: "Admin User",
     role: "admin",
     createdAt: new Date(),
@@ -30,7 +30,7 @@ const sampleUsers = [
   },
   {
     uid: "super_admin_sample_456",
-    email: "superadmin@hazard.com", 
+    email: "superadmin@incident.com", 
     displayName: "Super Admin",
     role: "super_admin",
     createdAt: new Date(),
@@ -38,7 +38,7 @@ const sampleUsers = [
   },
   {
     uid: "user_sample_789",
-    email: "user@hazard.com",
+    email: "user@incident.com",
     displayName: "Regular User",
     role: "user",
     createdAt: new Date(),
@@ -46,23 +46,23 @@ const sampleUsers = [
   }
 ];
 
-const sampleHazards = [
+const sampleIncidents = [
   {
-    id: "hazard_sample_1",
+    id: "incident_sample_1",
     userId: "user_sample_789",
-    userEmail: "user@hazard.com",
-    imageUrl: "https://example.com/hazard1.jpg",
-    description: "Pothole on main road causing traffic hazard",
+    userEmail: "user@incident.com",
+    imageUrl: "https://example.com/incident1.jpg",
+    description: "Pothole on main road causing traffic incident",
     location: "Zamboanga City",
     status: "pending",
     createdAt: new Date(),
     updatedAt: new Date()
   },
   {
-    id: "hazard_sample_2", 
+    id: "incident_sample_2", 
     userId: "user_sample_789",
-    userEmail: "user@hazard.com",
-    imageUrl: "https://example.com/hazard2.jpg",
+    userEmail: "user@incident.com",
+    imageUrl: "https://example.com/incident2.jpg",
     description: "Broken street light in residential area",
     location: "Ayala",
     status: "resolved",
@@ -82,11 +82,11 @@ async function setupFirestore() {
       console.log(`✅ Created user: ${user.email}`);
     }
     
-    // Create sample hazards
-    console.log("Creating sample hazards...");
-    for (const hazard of sampleHazards) {
-      await setDoc(doc(db, "hazards", hazard.id), hazard);
-      console.log(`✅ Created hazard: ${hazard.description}`);
+    // Create sample incidents
+    console.log("Creating sample incidents...");
+    for (const incident of sampleIncidents) {
+      await setDoc(doc(db, "incidents", incident.id), incident);
+      console.log(`✅ Created incident: ${incident.description}`);
     }
     
     console.log("🎉 Firestore setup completed successfully!");
@@ -99,8 +99,8 @@ async function setupFirestore() {
     console.log("│   │   ├── role: 'user' | 'admin' | 'super_admin'");
     console.log("│   │   ├── createdAt: timestamp");
     console.log("│   │   └── lastLogin: timestamp");
-    console.log("└── hazards/");
-    console.log("    ├── {hazardId}");
+    console.log("└── incidents/");
+    console.log("    ├── {incidentId}");
     console.log("    │   ├── id: string");
     console.log("    │   ├── userId: string");
     console.log("    │   ├── userEmail: string");

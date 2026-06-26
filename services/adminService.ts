@@ -18,7 +18,7 @@ export const createSuperAdminUser = async (email: string, password: string, disp
 // Create initial super admin (run this once during setup)
 export const setupInitialSuperAdmin = async () => {
   const result = await createSuperAdminUser(
-    'superadmin@hazard.com',
+    'superadmin@incident.com',
     'SuperAdmin123!',
     'Super Admin'
   );
@@ -35,7 +35,7 @@ export const setupInitialSuperAdmin = async () => {
 // Create regular admin
 export const setupAdminUser = async () => {
   const result = await createAdminUser(
-    'admin@hazard.com',
+    'admin@incident.com',
     'Admin123!',
     'Admin User'
   );

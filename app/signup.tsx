@@ -1,7 +1,19 @@
 import { Ionicons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
 import { useState } from 'react';
-import { Alert, StyleSheet, Text, TextInput, TouchableOpacity, useColorScheme, View } from 'react-native';
+import {
+    ActivityIndicator,
+    Alert,
+    KeyboardAvoidingView,
+    Platform,
+    ScrollView,
+    StyleSheet,
+    Text,
+    TextInput,
+    TouchableOpacity,
+    useColorScheme,
+    View,
+} from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { createUserWithRole } from '../services/authService';
 
@@ -12,6 +24,8 @@ export default function SignupScreen() {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
+  const [role, setRole] = useState<'user' | 'admin' | 'super_admin'>('user');
+  const [showRoleOptions, setShowRoleOptions] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
   const [showConfirmPassword, setShowConfirmPassword] = useState(false);
   const [loading, setLoading] = useState(false);
@@ -22,98 +36,129 @@ export default function SignupScreen() {
       flex: 1,
       backgroundColor: isDark ? '#000' : '#fff',
     },
-    header: {
-      padding: 20,
-      paddingTop: 40,
-      alignItems: 'center',
+    content: {
+      flexGrow: 1,
+      justifyContent: 'space-between',
+      paddingVertical: 24,
     },
-    logo: {
-      fontSize: 48,
-      fontWeight: 'bold',
-      color: '#007AFF',
+    header: {
+      paddingHorizontal: 24,
+      marginBottom: 24,
+    },
+    title: {
+      fontSize: 34,
+      fontWeight: '800',
+      color: isDark ? '#fff' : '#111',
       marginBottom: 8,
     },
     subtitle: {
       fontSize: 16,
-      color: isDark ? '#888' : '#666',
-      marginBottom: 40,
+      lineHeight: 24,
+      color: isDark ? '#aaa' : '#555',
     },
     form: {
-      paddingHorizontal: 20,
+      paddingHorizontal: 24,
     },
     inputGroup: {
-      marginBottom: 20,
+      marginBottom: 18,
     },
     label: {
-      fontSize: 16,
+      fontSize: 14,
       fontWeight: '600',
-      color: isDark ? '#fff' : '#000',
+      color: isDark ? '#fff' : '#111',
       marginBottom: 8,
     },
     input: {
-      backgroundColor: isDark ? '#2a2a2a' : '#f8f9fa',
+      backgroundColor: isDark ? '#1f1f1f' : '#f4f5f7',
       padding: 16,
-      borderRadius: 12,
+      borderRadius: 14,
       fontSize: 16,
-      color: isDark ? '#fff' : '#000',
+      color: isDark ? '#fff' : '#111',
       borderWidth: 1,
-      borderColor: isDark ? '#444' : '#e0e0e0',
-    },
-    button: {
-      backgroundColor: '#007AFF',
-      paddingVertical: 16,
-      paddingHorizontal: 32,
-      borderRadius: 12,
-      alignItems: 'center',
-      marginTop: 20,
-    },
-    buttonText: {
-      color: '#fff',
-      fontSize: 18,
-      fontWeight: '600',
-    },
-    loginContainer: {
-      flexDirection: 'row',
-      justifyContent: 'center',
-      marginTop: 20,
-    },
-    loginText: {
-      color: isDark ? '#888' : '#666',
-      fontSize: 14,
-    },
-    loginLink: {
-      color: '#007AFF',
-      fontSize: 14,
-      fontWeight: '600',
-    },
-    errorText: {
-      color: '#FF3B30',
-      fontSize: 14,
-      marginTop: 4,
+      borderColor: isDark ? '#333' : '#e0e0e0',
     },
     passwordContainer: {
       flexDirection: 'row',
       alignItems: 'center',
-      backgroundColor: isDark ? '#2a2a2a' : '#f8f9fa',
+      backgroundColor: isDark ? '#1f1f1f' : '#f4f5f7',
       borderWidth: 1,
-      borderColor: isDark ? '#444' : '#e0e0e0',
-      borderRadius: 12,
+      borderColor: isDark ? '#333' : '#e0e0e0',
+      borderRadius: 14,
     },
     passwordInput: {
       flex: 1,
       padding: 16,
       fontSize: 16,
-      color: isDark ? '#fff' : '#000',
+      color: isDark ? '#fff' : '#111',
     },
     eyeIcon: {
-      padding: 16,
+      paddingHorizontal: 16,
       color: isDark ? '#888' : '#666',
+    },
+    button: {
+      backgroundColor: '#007AFF',
+      paddingVertical: 16,
+      borderRadius: 14,
+      alignItems: 'center',
+      marginTop: 8,
+    },
+    buttonText: {
+      color: '#fff',
+      fontSize: 16,
+      fontWeight: '700',
+    },
+    footer: {
+      paddingHorizontal: 24,
+      paddingTop: 18,
+      alignItems: 'center',
+    },
+    footerText: {
+      color: isDark ? '#aaa' : '#666',
+      fontSize: 14,
+    },
+    footerLink: {
+      color: '#007AFF',
+      fontSize: 14,
+      fontWeight: '700',
+    },
+    dropdown: {
+      flexDirection: 'row',
+      justifyContent: 'space-between',
+      alignItems: 'center',
+      backgroundColor: isDark ? '#1f1f1f' : '#f4f5f7',
+      borderRadius: 14,
+      padding: 16,
+      borderWidth: 1,
+      borderColor: isDark ? '#333' : '#e0e0e0',
+    },
+    dropdownText: {
+      color: isDark ? '#fff' : '#111',
+      fontSize: 16,
+    },
+    dropdownIcon: {
+      color: isDark ? '#888' : '#666',
+    },
+    dropdownOptions: {
+      marginTop: 8,
+      borderRadius: 14,
+      backgroundColor: isDark ? '#1f1f1f' : '#f4f5f7',
+      borderWidth: 1,
+      borderColor: isDark ? '#333' : '#e0e0e0',
+      overflow: 'hidden',
+    },
+    dropdownOption: {
+      padding: 16,
+      borderBottomWidth: 1,
+      borderBottomColor: isDark ? '#333' : '#e0e0e0',
+    },
+    dropdownOptionText: {
+      color: isDark ? '#fff' : '#111',
+      fontSize: 16,
     },
   });
 
   const handleSignup = async () => {
-    // Basic validation
-    if (!name || !email || !password || !confirmPassword) {
+    if (!name.trim() || !email.trim() || !password || !confirmPassword) {
       Alert.alert('Error', 'Please fill in all fields');
       return;
     }
@@ -129,20 +174,25 @@ export default function SignupScreen() {
     }
 
     setLoading(true);
+
     try {
-      console.log('Attempting to create user with:', { email, name, role: 'user' });
-      const result = await createUserWithRole(email, password, name, 'user');
-      console.log('Signup result:', result);
-      
-      if (result.success) {
-        Alert.alert('Success', 'Account created successfully! Please sign in.');
-        router.push('/login');
+      const result = await createUserWithRole(email.trim(), password, name.trim(), role);
+      if (result.success && result.user) {
+        const selectedRole = result.user.role;
+        const route = selectedRole === 'super_admin'
+          ? '/admin/super-admin'
+          : selectedRole === 'admin'
+            ? '/admin/dashboard'
+            : '/dashboard';
+
+        Alert.alert('Success', 'Account created successfully!', [
+          { text: 'OK', onPress: () => router.replace(route) },
+        ]);
       } else {
-        Alert.alert('Signup Error', result.error);
+        Alert.alert('Signup Error', result.error || 'Unable to create account');
       }
     } catch (error: any) {
-      console.error('Signup component error:', error);
-      Alert.alert('Signup Error', error.message);
+      Alert.alert('Signup Error', error?.message || 'Unable to create account');
     } finally {
       setLoading(false);
     }
@@ -150,90 +200,122 @@ export default function SignupScreen() {
 
   return (
     <SafeAreaView style={styles.container}>
-      <View style={styles.header}>
-        <Text style={styles.logo}>Hazard</Text>
-        <Text style={styles.subtitle}>Create your account</Text>
-      </View>
+      <KeyboardAvoidingView
+        behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+        style={{ flex: 1 }}
+      >
+        <ScrollView contentContainerStyle={styles.content} keyboardShouldPersistTaps="handled">
+          <View style={styles.header}>
+            <Text style={styles.title}>Create an account</Text>
+            <Text style={styles.subtitle}>Sign up to access incident reporting, dashboard views, and secure account features.</Text>
+          </View>
 
-      <View style={styles.form}>
-        <View style={styles.inputGroup}>
-          <Text style={styles.label}>Full Name</Text>
-          <TextInput
-            style={styles.input}
-            placeholder="Enter your full name"
-            placeholderTextColor={isDark ? '#888' : '#999'}
-            value={name}
-            onChangeText={setName}
-            autoCapitalize="words"
-          />
-        </View>
+          <View style={styles.form}>
+            <View style={styles.inputGroup}>
+              <Text style={styles.label}>Role</Text>
+              <TouchableOpacity
+                style={styles.dropdown}
+                onPress={() => setShowRoleOptions((prev) => !prev)}
+              >
+                <Text style={styles.dropdownText}>{role.replace('_', ' ')}</Text>
+                <Ionicons name={showRoleOptions ? 'chevron-up' : 'chevron-down'} size={20} style={styles.dropdownIcon} />
+              </TouchableOpacity>
+              {showRoleOptions ? (
+                <View style={styles.dropdownOptions}>
+                  {['user', 'admin', 'super_admin'].map((option) => (
+                    <TouchableOpacity
+                      key={option}
+                      style={styles.dropdownOption}
+                      onPress={() => {
+                        setRole(option as 'user' | 'admin' | 'super_admin');
+                        setShowRoleOptions(false);
+                      }}
+                    >
+                      <Text style={styles.dropdownOptionText}>{option.replace('_', ' ')}</Text>
+                    </TouchableOpacity>
+                  ))}
+                </View>
+              ) : null}
+            </View>
 
-        <View style={styles.inputGroup}>
-          <Text style={styles.label}>Email</Text>
-          <TextInput
-            style={styles.input}
-            placeholder="Enter your email"
-            placeholderTextColor={isDark ? '#888' : '#999'}
-            value={email}
-            onChangeText={setEmail}
-            keyboardType="email-address"
-            autoCapitalize="none"
-          />
-        </View>
-
-        <View style={styles.inputGroup}>
-          <Text style={styles.label}>Password</Text>
-          <View style={styles.passwordContainer}>
-            <TextInput
-              style={styles.passwordInput}
-              placeholder="Create a password"
-              placeholderTextColor={isDark ? '#888' : '#999'}
-              value={password}
-              onChangeText={setPassword}
-              secureTextEntry={!showPassword}
-            />
-            <TouchableOpacity onPress={() => setShowPassword(!showPassword)}>
-              <Ionicons 
-                name={showPassword ? 'eye-off' : 'eye'} 
-                size={24} 
-                style={styles.eyeIcon}
+            <View style={styles.inputGroup}>
+              <Text style={styles.label}>Full Name</Text>
+              <TextInput
+                style={styles.input}
+                placeholder="Enter your full name"
+                placeholderTextColor={isDark ? '#888' : '#999'}
+                value={name}
+                onChangeText={setName}
+                autoCapitalize="words"
               />
+            </View>
+
+            <View style={styles.inputGroup}>
+              <Text style={styles.label}>Email Address</Text>
+              <TextInput
+                style={styles.input}
+                placeholder="Enter your email"
+                placeholderTextColor={isDark ? '#888' : '#999'}
+                value={email}
+                onChangeText={setEmail}
+                keyboardType="email-address"
+                autoCapitalize="none"
+              />
+            </View>
+
+            <View style={styles.inputGroup}>
+              <Text style={styles.label}>Password</Text>
+              <View style={styles.passwordContainer}>
+                <TextInput
+                  style={styles.passwordInput}
+                  placeholder="Create a password"
+                  placeholderTextColor={isDark ? '#888' : '#999'}
+                  value={password}
+                  onChangeText={setPassword}
+                  secureTextEntry={!showPassword}
+                />
+                <TouchableOpacity onPress={() => setShowPassword((prev) => !prev)}>
+                  <Ionicons name={showPassword ? 'eye-off' : 'eye'} size={24} style={styles.eyeIcon} />
+                </TouchableOpacity>
+              </View>
+            </View>
+
+            <View style={styles.inputGroup}>
+              <Text style={styles.label}>Confirm Password</Text>
+              <View style={styles.passwordContainer}>
+                <TextInput
+                  style={styles.passwordInput}
+                  placeholder="Confirm your password"
+                  placeholderTextColor={isDark ? '#888' : '#999'}
+                  value={confirmPassword}
+                  onChangeText={setConfirmPassword}
+                  secureTextEntry={!showConfirmPassword}
+                />
+                <TouchableOpacity onPress={() => setShowConfirmPassword((prev) => !prev)}>
+                  <Ionicons name={showConfirmPassword ? 'eye-off' : 'eye'} size={24} style={styles.eyeIcon} />
+                </TouchableOpacity>
+              </View>
+            </View>
+
+            <TouchableOpacity style={styles.button} onPress={handleSignup} disabled={loading}>
+              {loading ? (
+                <ActivityIndicator color="#fff" />
+              ) : (
+                <Text style={styles.buttonText}>Create Account</Text>
+              )}
             </TouchableOpacity>
           </View>
-        </View>
 
-        <View style={styles.inputGroup}>
-          <Text style={styles.label}>Confirm Password</Text>
-          <View style={styles.passwordContainer}>
-            <TextInput
-              style={styles.passwordInput}
-              placeholder="Confirm your password"
-              placeholderTextColor={isDark ? '#888' : '#999'}
-              value={confirmPassword}
-              onChangeText={setConfirmPassword}
-              secureTextEntry={!showConfirmPassword}
-            />
-            <TouchableOpacity onPress={() => setShowConfirmPassword(!showConfirmPassword)}>
-              <Ionicons 
-                name={showConfirmPassword ? 'eye-off' : 'eye'} 
-                size={24} 
-                style={styles.eyeIcon}
-              />
-            </TouchableOpacity>
+          <View style={styles.footer}>
+            <Text style={styles.footerText}>
+              Already have an account?{' '}
+              <Text style={styles.footerLink} onPress={() => router.push('/login')}>
+                Sign In
+              </Text>
+            </Text>
           </View>
-        </View>
-
-        <TouchableOpacity style={styles.button} onPress={handleSignup}>
-          <Text style={styles.buttonText}>Create Account</Text>
-        </TouchableOpacity>
-
-        <View style={styles.loginContainer}>
-          <Text style={styles.loginText}>Already have an account? </Text>
-          <TouchableOpacity onPress={() => router.push('/login')}>
-            <Text style={styles.loginLink}>Sign In</Text>
-          </TouchableOpacity>
-        </View>
-      </View>
+        </ScrollView>
+      </KeyboardAvoidingView>
     </SafeAreaView>
   );
 }

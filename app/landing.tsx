@@ -81,7 +81,7 @@ export default function LandingScreen() {
         <View style={styles.buttonContainer}>
           <TouchableOpacity 
             style={styles.primaryButton}
-            onPress={() => router.push('/(auth)/login')}
+            onPress={() => router.push('/login')}
           >
             <Text style={styles.primaryButtonText}>Login</Text>
           </TouchableOpacity>

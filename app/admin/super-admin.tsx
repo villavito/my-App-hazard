@@ -1,8 +1,12 @@
 import { Ionicons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
+import { useEffect, useState } from 'react';
 import { ScrollView, StyleSheet, Text, TouchableOpacity, useColorScheme, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
+import { AGENCIES, AGENCY_COLORS, AGENCY_LABELS } from '../../constants/agencies';
 import { useAuth } from '../../contexts/AuthContext';
+import { signOutUser } from '../../services/authService';
+import { getAgencyIncidentCounts, getAllUsers } from '../../services/firestoreService';
 
 export default function SuperAdminDashboard() {
   const colorScheme = useColorScheme();
@@ -119,11 +123,54 @@ export default function SuperAdminDashboard() {
       fontSize: 18,
       fontWeight: '600',
     },
+    agencyCard: {
+      borderLeftWidth: 4,
+      marginBottom: 10,
+    },
+    agencyCount: {
+      fontSize: 22,
+      fontWeight: 'bold',
+      color: '#007AFF',
+      marginRight: 12,
+      minWidth: 28,
+      textAlign: 'center',
+    },
   });
 
+  const [totalUsers, setTotalUsers] = useState(0);
+  const [adminCount, setAdminCount] = useState(0);
+  const [agencyCounts, setAgencyCounts] = useState<Record<string, number>>({
+    PNP: 0,
+    BFP: 0,
+    RHU: 0,
+    BDRRMC: 0,
+  });
+
+  useEffect(() => {
+    const loadStats = async () => {
+      const [usersResult, countsResult] = await Promise.all([
+        getAllUsers(),
+        getAgencyIncidentCounts(),
+      ]);
+
+      if (usersResult.success && usersResult.data) {
+        setTotalUsers(usersResult.data.length);
+        setAdminCount(
+          usersResult.data.filter((user: any) => user.role === 'admin' || user.role === 'super_admin').length
+        );
+      }
+
+      if (countsResult.success && countsResult.data) {
+        setAgencyCounts(countsResult.data);
+      }
+    };
+
+    loadStats();
+  }, []);
+
   const handleLogout = async () => {
-    // TODO: Implement logout logic
-    router.push('/login');
+    await signOutUser();
+    router.replace('/login');
   };
 
   const superAdminFeatures = [
@@ -134,6 +181,12 @@ export default function SuperAdminDashboard() {
     },
     {
       icon: 'shield-checkmark-outline',
+      title: 'Incident Reports',
+      description: 'View all agency incident reports',
+      route: '/admin/incidents',
+    },
+    {
+      icon: 'lock-closed-outline',
       title: 'System Security',
       description: 'Configure security settings',
     },
@@ -185,23 +238,48 @@ export default function SuperAdminDashboard() {
         <View style={styles.content}>
           <View style={styles.statsContainer}>
             <View style={styles.statCard}>
-              <Text style={styles.statNumber}>0</Text>
+              <Text style={styles.statNumber}>{totalUsers}</Text>
               <Text style={styles.statLabel}>Total Users</Text>
             </View>
             <View style={styles.statCard}>
-              <Text style={styles.statNumber}>0</Text>
+              <Text style={styles.statNumber}>{adminCount}</Text>
               <Text style={styles.statLabel}>Admins</Text>
             </View>
             <View style={styles.statCard}>
-              <Text style={styles.statNumber}>0</Text>
-              <Text style={styles.statLabel}>System Health</Text>
+              <Text style={styles.statNumber}>
+                {Object.values(agencyCounts).reduce((sum, count) => sum + count, 0)}
+              </Text>
+              <Text style={styles.statLabel}>Reports</Text>
             </View>
+          </View>
+
+          <View style={styles.section}>
+            <Text style={styles.sectionTitle}>Agency Reports</Text>
+            {AGENCIES.map((agency) => (
+              <TouchableOpacity
+                key={agency}
+                style={[styles.card, styles.agencyCard, { borderLeftColor: AGENCY_COLORS[agency] }]}
+                onPress={() => router.push({ pathname: '/admin/incidents', params: { agency } })}
+              >
+                <Text style={styles.agencyCount}>{agencyCounts[agency] ?? 0}</Text>
+                <Ionicons name="shield-outline" size={24} style={styles.cardIcon} />
+                <View style={styles.cardContent}>
+                  <Text style={styles.cardTitle}>{agency}</Text>
+                  <Text style={styles.cardDescription}>{AGENCY_LABELS[agency]}</Text>
+                </View>
+                <Ionicons name="chevron-forward" size={20} color={isDark ? '#888' : '#666'} />
+              </TouchableOpacity>
+            ))}
           </View>
 
           <View style={styles.section}>
             <Text style={styles.sectionTitle}>System Management</Text>
             {superAdminFeatures.map((feature, index) => (
-              <TouchableOpacity key={index} style={styles.card}>
+              <TouchableOpacity
+                key={index}
+                style={styles.card}
+                onPress={() => feature.route && router.push(feature.route as any)}
+              >
                 <Ionicons name={feature.icon as keyof typeof Ionicons.glyphMap} size={24} style={styles.cardIcon} />
                 <View style={styles.cardContent}>
                   <Text style={styles.cardTitle}>{feature.title}</Text>
