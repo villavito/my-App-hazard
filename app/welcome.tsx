@@ -1,3 +1,4 @@
+import { LinearGradient } from 'expo-linear-gradient';
 import { router } from 'expo-router';
 import { useEffect, useRef } from 'react';
 import { Animated, PanResponder, StyleSheet, Text, TouchableOpacity } from 'react-native';
@@ -7,7 +8,7 @@ export default function WelcomeScreen() {
   const contentAnim = useRef(new Animated.Value(0)).current;
 
   useEffect(() => {
-    // Splash animation sequence
+    // Splash circle flourish
     Animated.sequence([
       Animated.timing(splashAnim, {
         toValue: 1,
@@ -19,12 +20,16 @@ export default function WelcomeScreen() {
         duration: 600,
         useNativeDriver: true,
       }),
-      Animated.timing(contentAnim, {
-        toValue: 1,
-        duration: 500,
-        useNativeDriver: true,
-      }),
     ]).start();
+
+    // Reveal content on its own timer so a stalled splash animation
+    // (common with useNativeDriver timing on web) can't block it forever.
+    Animated.timing(contentAnim, {
+      toValue: 1,
+      duration: 500,
+      delay: 1400,
+      useNativeDriver: true,
+    }).start();
   }, []);
 
   const panResponder = PanResponder.create({
@@ -40,6 +45,12 @@ export default function WelcomeScreen() {
   });
 
   return (
+    <LinearGradient
+      colors={['#000000', '#092e6d', '#403673', '#ffffff']}
+      style={styles.gradient}
+      start={{ x: 0.5, y: 0 }}
+      end={{ x: 0.5, y: 1 }}
+    >
     <Animated.View style={styles.container} {...panResponder.panHandlers}>
       {/* Splash Effect */}
       <Animated.View 
@@ -95,10 +106,14 @@ export default function WelcomeScreen() {
         </TouchableOpacity>
       </Animated.View>
     </Animated.View>
+    </LinearGradient>
   );
 }
 
 const styles = StyleSheet.create({
+  gradient: {
+    flex: 1,
+  },
   container: {
     flex: 1,
     justifyContent: 'flex-start',

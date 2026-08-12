@@ -1,9 +1,10 @@
 import { Ionicons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
 import { useState } from 'react';
-import { ActivityIndicator, Alert, StyleSheet, Text, TextInput, TouchableOpacity, useColorScheme, View } from 'react-native';
+import { ActivityIndicator, StyleSheet, Text, TextInput, TouchableOpacity, useColorScheme, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { signInUser } from '../services/authService';
+import { showAlert } from '../utils/crossPlatformAlert';
 
 export default function LoginScreen() {
   const colorScheme = useColorScheme();
@@ -118,7 +119,7 @@ export default function LoginScreen() {
   const handleLogin = async () => {
     console.log('handleLogin invoked', { email });
     if (!email || !password) {
-      Alert.alert('Error', 'Please fill in all fields');
+      showAlert('Error', 'Please fill in all fields');
       return;
     }
 
@@ -127,20 +128,20 @@ export default function LoginScreen() {
       const result = await signInUser(email, password);
       
       if (result.success && result.user) {
-        Alert.alert('Success', `Welcome back! You are logged in as ${result.user.role}`);
+        showAlert('Success', `Welcome back! You are logged in as ${result.user.role}`);
         // Navigate based on user role
         if (result.user.role === 'super_admin') {
           router.push('/admin/super-admin');
         } else if (result.user.role === 'admin') {
           router.push('/admin/dashboard');
         } else {
-          router.push('/dashboard');
+          router.push('/(tabs)');
         }
       } else {
-        Alert.alert('Login Error', result.error || 'Login failed');
+        showAlert('Login Error', result.error || 'Login failed');
       }
     } catch (error: any) {
-      Alert.alert('Login Error', error.message);
+      showAlert('Login Error', error.message);
     } finally {
       setLoading(false);
     }
@@ -149,7 +150,7 @@ export default function LoginScreen() {
   return (
     <SafeAreaView style={styles.container}>
       <View style={styles.header}>
-        <Text style={styles.logo}>Incident</Text>
+        <Text style={styles.logo}>INCIDENT</Text>
         <Text style={styles.subtitle}>Sign in to continue</Text>
       </View>
 

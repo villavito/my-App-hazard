@@ -8,6 +8,9 @@ const users = [
   { email: 'user@incident.com', displayName: 'Regular User', role: 'user' },
   { email: 'admin@incident.com', displayName: 'Admin User', role: 'admin' },
   { email: 'superadmin@incident.com', displayName: 'Super Admin', role: 'super_admin' },
+  { email: 'philippinenationalpolice@gmail.com', displayName: 'PNP Admin', role: 'admin', agency: 'PNP' },
+  { email: 'bureauoffireprotection@admin.com', displayName: 'BFP Admin', role: 'admin', agency: 'BFP' },
+  { email: 'barangay@admin.com', displayName: 'Barangay Admin', role: 'admin', agency: 'Barangay' },
 ];
 
 async function ensureUser(u) {
@@ -32,7 +35,7 @@ async function ensureUser(u) {
     }
 
     // Set custom claims for role
-    await auth.setCustomUserClaims(userRecord.uid, { role: u.role });
+    await auth.setCustomUserClaims(userRecord.uid, { role: u.role, ...(u.agency ? { agency: u.agency } : {}) });
 
     // Ensure Firestore user doc
     const userDocRef = firestore.collection('users').doc(userRecord.uid);
@@ -41,6 +44,7 @@ async function ensureUser(u) {
       email: u.email,
       displayName: u.displayName,
       role: u.role,
+      ...(u.agency ? { agency: u.agency } : {}),
       createdAt: admin.firestore.FieldValue.serverTimestamp(),
       lastLogin: admin.firestore.FieldValue.serverTimestamp(),
     }, { merge: true });

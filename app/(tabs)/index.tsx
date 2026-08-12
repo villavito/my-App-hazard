@@ -1,141 +1,261 @@
-import { Ionicons } from '@expo/vector-icons';
-import { useRouter } from 'expo-router';
-import { ScrollView, StyleSheet, Text, TouchableOpacity, useColorScheme, View } from 'react-native';
-import { SafeAreaView } from 'react-native-safe-area-context';
+import { Ionicons } from "@expo/vector-icons";
+import { useRouter } from "expo-router";
+import React, { useEffect, useState } from "react";
+import {
+  ActivityIndicator,
+  RefreshControl,
+  ScrollView,
+  StyleSheet,
+  Text,
+  TouchableOpacity,
+  useColorScheme,
+  View,
+} from "react-native";
+import { SafeAreaView } from "react-native-safe-area-context";
+import { useAuth } from "../../contexts/AuthContext";
+import { getUserIncidents } from "../../services/firestoreService";
 
 export default function HomeScreen() {
   const colorScheme = useColorScheme();
-  const isDark = colorScheme === 'dark';
+  const isDark = colorScheme === "dark";
   const router = useRouter();
+  const { user, userRole } = useAuth();
+  const [stats, setStats] = useState({
+    total: 0,
+    pending: 0,
+    inProgress: 0,
+    resolved: 0,
+  });
+  const [loading, setLoading] = useState(true);
+  const [refreshing, setRefreshing] = useState(false);
+
+  const fetchData = async () => {
+    if (!user) return;
+    const result = await getUserIncidents(user.uid);
+    if (result.success && result.data) {
+      const incidents = result.data as any[];
+      setStats({
+        total: incidents.length,
+        pending: incidents.filter((i: any) => i.status === "pending").length,
+        inProgress: incidents.filter(
+          (i: any) => i.status === "in_progress" || i.status === "in-progress",
+        ).length,
+        resolved: incidents.filter((i: any) => i.status === "resolved").length,
+      });
+    }
+    setLoading(false);
+  };
+
+  useEffect(() => {
+    fetchData();
+  }, [user]);
+
+  const onRefresh = async () => {
+    setRefreshing(true);
+    await fetchData();
+    setRefreshing(false);
+  };
+
+  const getInitials = (name: string) => {
+    return name
+      .split(" ")
+      .map((w) => w[0])
+      .join("")
+      .toUpperCase()
+      .slice(0, 2);
+  };
 
   const styles = StyleSheet.create({
     container: {
       flex: 1,
-      backgroundColor: isDark ? '#000' : '#fff',
+      backgroundColor: isDark ? "#000" : "#f5f5f5",
     },
-    scrollView: {
-      flex: 1,
+    scrollContent: {
+      paddingBottom: 20,
     },
     header: {
-      padding: 20,
-      paddingTop: 40,
-      backgroundColor: isDark ? '#1a1a1a' : '#f8f9fa',
-      alignItems: 'center',
+      paddingHorizontal: 20,
+      paddingTop: 20,
+      paddingBottom: 16,
+      backgroundColor: isDark ? "#1a1a1a" : "#fff",
     },
-    title: {
-      fontSize: 32,
-      fontWeight: 'bold',
-      color: isDark ? '#fff' : '#000',
-      marginBottom: 8,
+    headerTop: {
+      flexDirection: "row",
+      justifyContent: "space-between",
+      alignItems: "center",
     },
-    subtitle: {
-      fontSize: 16,
-      color: isDark ? '#888' : '#666',
+    greeting: {
+      fontSize: 14,
+      color: isDark ? "#888" : "#666",
+    },
+    userName: {
+      fontSize: 24,
+      fontWeight: "700",
+      color: isDark ? "#fff" : "#000",
+      marginTop: 2,
+    },
+    avatarContainer: {
+      width: 44,
+      height: 44,
+      borderRadius: 22,
+      backgroundColor: "#007AFF",
+      alignItems: "center",
+      justifyContent: "center",
+    },
+    avatarText: {
+      color: "#fff",
+      fontSize: 18,
+      fontWeight: "700",
+    },
+    statsRow: {
+      flexDirection: "row",
+      paddingHorizontal: 20,
+      marginTop: 20,
+      gap: 10,
+    },
+    statCard: {
+      flex: 1,
+      backgroundColor: isDark ? "#1a1a1a" : "#fff",
+      padding: 14,
+      borderRadius: 14,
+      alignItems: "center",
+      elevation: 2,
+      shadowColor: "#000",
+      shadowOffset: { width: 0, height: 1 },
+      shadowOpacity: 0.1,
+      shadowRadius: 3,
+    },
+    statNumber: {
+      fontSize: 22,
+      fontWeight: "800",
+      color: "#007AFF",
+    },
+    statLabel: {
+      fontSize: 11,
+      color: isDark ? "#888" : "#666",
+      marginTop: 4,
+      textAlign: "center",
     },
     section: {
-      padding: 20,
+      paddingHorizontal: 20,
+      marginTop: 24,
+    },
+    sectionHeader: {
+      flexDirection: "row",
+      justifyContent: "space-between",
+      alignItems: "center",
+      marginBottom: 14,
     },
     sectionTitle: {
-      fontSize: 24,
-      fontWeight: '600',
-      color: isDark ? '#fff' : '#000',
-      marginBottom: 16,
+      fontSize: 18,
+      fontWeight: "700",
+      color: isDark ? "#fff" : "#000",
     },
-    featureList: {
+    actionGrid: {
+      flexDirection: "row",
+      flexWrap: "wrap",
       gap: 12,
     },
-    featureItem: {
-      flexDirection: 'row',
-      alignItems: 'center',
-      backgroundColor: isDark ? '#2a2a2a' : '#f8f9fa',
-      padding: 16,
-      borderRadius: 12,
+    actionCard: {
+      width: "48%",
+      backgroundColor: isDark ? "#1a1a1a" : "#fff",
+      padding: 20,
+      borderRadius: 16,
+      alignItems: "center",
+      elevation: 2,
+      shadowColor: "#000",
+      shadowOffset: { width: 0, height: 1 },
+      shadowOpacity: 0.1,
+      shadowRadius: 3,
     },
-    featureIcon: {
-      fontSize: 24,
-      marginRight: 16,
+    actionIcon: {
+      marginBottom: 10,
     },
-    featureText: {
-      flex: 1,
-    },
-    featureTitle: {
-      fontSize: 16,
-      fontWeight: '600',
-      color: isDark ? '#fff' : '#000',
-      marginBottom: 4,
-    },
-    featureDescription: {
+    actionLabel: {
       fontSize: 14,
-      color: isDark ? '#888' : '#666',
+      fontWeight: "600",
+      color: isDark ? "#fff" : "#000",
+      textAlign: "center",
     },
-    button: {
-      backgroundColor: '#007AFF',
-      paddingVertical: 16,
-      paddingHorizontal: 32,
-      borderRadius: 12,
-      alignItems: 'center',
-      marginTop: 20,
-    },
-    buttonText: {
-      color: '#fff',
-      fontSize: 18,
-      fontWeight: '600',
+    loadingContainer: {
+      flex: 1,
+      justifyContent: "center",
+      alignItems: "center",
     },
   });
 
-  const features: Array<{
-    icon: keyof typeof Ionicons.glyphMap;
-    title: string;
-    description: string;
-  }> = [
-    {
-      icon: 'shield-checkmark-outline',
-      title: 'Safety First',
-      description: 'Advanced incident detection and prevention systems',
-    },
-    {
-      icon: 'analytics-outline',
-      title: 'Real-time Analytics',
-      description: 'Monitor and analyze potential risks instantly',
-    },
-    {
-      icon: 'notifications-outline',
-      title: 'Smart Alerts',
-      description: 'Get notified about hazards before they become critical',
-    },
-  ];
+  if (loading) {
+    return (
+      <SafeAreaView style={styles.container}>
+        <View style={styles.loadingContainer}>
+          <ActivityIndicator size="large" color="#007AFF" />
+        </View>
+      </SafeAreaView>
+    );
+  }
 
   return (
     <SafeAreaView style={styles.container}>
-      <ScrollView style={styles.scrollView} showsVerticalScrollIndicator={false}>
+      <ScrollView
+        contentContainerStyle={styles.scrollContent}
+        showsVerticalScrollIndicator={false}
+        refreshControl={
+          <RefreshControl
+            refreshing={refreshing}
+            onRefresh={onRefresh}
+            tintColor="#007AFF"
+          />
+        }
+      >
+        {/* Header */}
         <View style={styles.header}>
-              <Text style={styles.title}>Incident</Text>
-              <Text style={styles.subtitle}>Your safety companion</Text>
+          <View style={styles.headerTop}>
+            <View>
+              <Text style={styles.greeting}>WELCOME</Text>
+              <Text style={styles.userName}>
+                {userRole?.displayName || "User"}
+              </Text>
             </View>
-
-        <View style={styles.section}>
-          <TouchableOpacity style={styles.button} onPress={() => router.push('/login')}>
-            <Text style={styles.buttonText}>Get Started</Text>
-          </TouchableOpacity>
+            <TouchableOpacity onPress={() => router.push("/profile")}>
+              <View style={styles.avatarContainer}>
+                <Text style={styles.avatarText}>
+                  {getInitials(userRole?.displayName || user?.email || "U")}
+                </Text>
+              </View>
+            </TouchableOpacity>
+          </View>
         </View>
 
+        {/* DASHBOARD */}
         <View style={styles.section}>
-          <Text style={styles.sectionTitle}>Key Features</Text>
-          <View style={styles.featureList}>
-            {features.map((feature, index) => (
-              <View key={index} style={styles.featureItem}>
-                <Ionicons 
-                  name={feature.icon} 
-                  size={24} 
-                  color="#007AFF"
-                  style={styles.featureIcon}
-                />
-                <View style={styles.featureText}>
-                  <Text style={styles.featureTitle}>{feature.title}</Text>
-                  <Text style={styles.featureDescription}>{feature.description}</Text>
-                </View>
-              </View>
-            ))}
+          <View style={styles.sectionHeader}>
+            <Text style={styles.sectionTitle}>DASHBOARD</Text>
+          </View>
+          <View style={styles.actionGrid}>
+            <TouchableOpacity
+              style={styles.actionCard}
+              onPress={() => router.push("/capture-incident")}
+            >
+              <Ionicons
+                name="camera-outline"
+                size={32}
+                color="#007AFF"
+                style={styles.actionIcon}
+              />
+              <Text style={styles.actionLabel}>Report Incident</Text>
+            </TouchableOpacity>
+            <TouchableOpacity
+              style={styles.actionCard}
+              onPress={() => router.push("/my-reports")}
+            >
+              <Ionicons
+                name="document-text-outline"
+                size={32}
+                color="#007AFF"
+                style={styles.actionIcon}
+              />
+              <Text style={styles.actionLabel}>My Incident History Report</Text>
+            </TouchableOpacity>
           </View>
         </View>
       </ScrollView>

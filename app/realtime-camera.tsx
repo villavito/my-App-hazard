@@ -1,15 +1,17 @@
 import { Ionicons } from '@expo/vector-icons';
-import { CameraView, useCameraPermissions } from 'expo-camera';
+import { CameraView, useCameraPermissions, useMicrophonePermissions } from 'expo-camera';
 import { useRouter } from 'expo-router';
 import React, { useState } from 'react';
-import { Alert, StyleSheet, Text, TouchableOpacity, useColorScheme, View } from 'react-native';
+import { StyleSheet, Text, TouchableOpacity, useColorScheme, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
+import { showAlert } from '../utils/crossPlatformAlert';
 
 export default function RealtimeCameraScreen() {
   const colorScheme = useColorScheme();
   const isDark = colorScheme === 'dark';
   const router = useRouter();
   const [permission, requestPermission] = useCameraPermissions();
+  const [microphonePermission, requestMicrophonePermission] = useMicrophonePermissions();
   const [facing, setFacing] = useState<'back' | 'front'>('back');
   const [isRecording, setIsRecording] = useState(false);
   const cameraRef = React.useRef<CameraView>(null);
@@ -37,6 +39,35 @@ export default function RealtimeCameraScreen() {
       fontWeight: 'bold',
       color: '#fff',
     },
+    recordingBadge: {
+      position: 'absolute',
+      top: 0,
+      left: 0,
+      right: 0,
+      alignItems: 'center',
+      paddingTop: 110,
+      zIndex: 10,
+    },
+    recordingBadgeInner: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: 6,
+      backgroundColor: 'rgba(0,0,0,0.6)',
+      paddingHorizontal: 12,
+      paddingVertical: 6,
+      borderRadius: 20,
+    },
+    recordingDot: {
+      width: 10,
+      height: 10,
+      borderRadius: 5,
+      backgroundColor: '#FF3B30',
+    },
+    recordingText: {
+      color: '#fff',
+      fontSize: 13,
+      fontWeight: '600',
+    },
     camera: {
       flex: 1,
     },
@@ -59,11 +90,23 @@ export default function RealtimeCameraScreen() {
       alignItems: 'center',
       justifyContent: 'center',
     },
+    buttonDisabled: {
+      opacity: 0.4,
+    },
     captureButton: {
       backgroundColor: '#FF3B30',
       width: 70,
       height: 70,
       borderRadius: 35,
+    },
+    captureButtonRecording: {
+      backgroundColor: '#fff',
+    },
+    captureButtonInner: {
+      width: 28,
+      height: 28,
+      borderRadius: 6,
+      backgroundColor: '#FF3B30',
     },
     flipButton: {
       backgroundColor: 'rgba(255,255,255,0.3)',
@@ -97,7 +140,7 @@ export default function RealtimeCameraScreen() {
     },
   });
 
-  if (!permission) {
+  if (!permission || !microphonePermission) {
     return (
       <SafeAreaView style={styles.container}>
         <View style={styles.permissionContainer}>
@@ -107,18 +150,24 @@ export default function RealtimeCameraScreen() {
     );
   }
 
-  if (!permission.granted) {
+  if (!permission.granted || !microphonePermission.granted) {
     return (
       <SafeAreaView style={styles.container}>
         <View style={styles.permissionContainer}>
           <Text style={styles.permissionText}>
-            We need your permission to show the camera
+            We need your permission to use the camera and microphone to record video
           </Text>
-          <TouchableOpacity style={styles.permissionButton} onPress={requestPermission}>
+          <TouchableOpacity
+            style={styles.permissionButton}
+            onPress={async () => {
+              await requestPermission();
+              await requestMicrophonePermission();
+            }}
+          >
             <Text style={styles.permissionButtonText}>Grant permission</Text>
           </TouchableOpacity>
-          <TouchableOpacity 
-            style={[styles.permissionButton, { marginTop: 10, backgroundColor: '#666' }]} 
+          <TouchableOpacity
+            style={[styles.permissionButton, { marginTop: 10, backgroundColor: '#666' }]}
             onPress={() => router.back()}
           >
             <Text style={styles.permissionButtonText}>Go Back</Text>
@@ -132,51 +181,79 @@ export default function RealtimeCameraScreen() {
     setFacing(current => (current === 'back' ? 'front' : 'back'));
   };
 
-  const takePicture = async () => {
-    if (!permission?.granted || !cameraRef.current) return;
+  const startRecording = async () => {
+    if (!cameraRef.current || isRecording) return;
 
     try {
-      const photo = await cameraRef.current.takePictureAsync({
-        quality: 0.8,
-        base64: false,
-      });
-      
-      if (photo.uri) {
-        // Navigate back with the photo URI
+      setIsRecording(true);
+      const video = await cameraRef.current.recordAsync();
+
+      if (video?.uri) {
         router.replace({
           pathname: '/capture-incident',
-          params: { photoUri: photo.uri }
+          params: { videoUri: video.uri },
         });
       }
     } catch (error) {
-      console.error('Error taking picture:', error);
-      Alert.alert('Error', 'Failed to capture photo');
+      console.error('Error recording video:', error);
+      showAlert('Error', 'Failed to record video');
+    } finally {
+      setIsRecording(false);
     }
+  };
+
+  const stopRecording = () => {
+    if (!cameraRef.current || !isRecording) return;
+    cameraRef.current.stopRecording();
   };
 
   return (
     <SafeAreaView style={styles.container}>
       <View style={styles.header}>
-        <TouchableOpacity onPress={() => router.back()}>
-          <Ionicons name="arrow-back" size={24} color="#fff" />
+        <TouchableOpacity onPress={() => router.back()} disabled={isRecording}>
+          <Ionicons name="arrow-back" size={24} color={isRecording ? 'rgba(255,255,255,0.3)' : '#fff'} />
         </TouchableOpacity>
-        <Text style={styles.headerTitle}>Real-Time Camera</Text>
+        <Text style={styles.headerTitle}>Record Incident Video</Text>
         <View style={{ width: 24 }} />
       </View>
 
-      <CameraView ref={cameraRef} style={styles.camera} facing={facing} />
+      {isRecording && (
+        <View style={styles.recordingBadge}>
+          <View style={styles.recordingBadgeInner}>
+            <View style={styles.recordingDot} />
+            <Text style={styles.recordingText}>Recording...</Text>
+          </View>
+        </View>
+      )}
+
+      <CameraView ref={cameraRef} style={styles.camera} facing={facing} mode="video" />
 
       <View style={styles.buttonContainer}>
-        <TouchableOpacity style={styles.button} onPress={() => router.back()}>
+        <TouchableOpacity
+          style={[styles.button, isRecording && styles.buttonDisabled]}
+          onPress={() => router.back()}
+          disabled={isRecording}
+        >
           <Ionicons name="close" size={24} color="#fff" />
           <Text style={styles.buttonText}>Cancel</Text>
         </TouchableOpacity>
 
-        <TouchableOpacity style={[styles.button, styles.captureButton]} onPress={takePicture}>
-          <Ionicons name="camera" size={30} color="#fff" />
+        <TouchableOpacity
+          style={[styles.button, styles.captureButton, isRecording && styles.captureButtonRecording]}
+          onPress={isRecording ? stopRecording : startRecording}
+        >
+          {isRecording ? (
+            <View style={styles.captureButtonInner} />
+          ) : (
+            <Ionicons name="videocam" size={30} color="#fff" />
+          )}
         </TouchableOpacity>
 
-        <TouchableOpacity style={[styles.button, styles.flipButton]} onPress={toggleCameraFacing}>
+        <TouchableOpacity
+          style={[styles.button, styles.flipButton, isRecording && styles.buttonDisabled]}
+          onPress={toggleCameraFacing}
+          disabled={isRecording}
+        >
           <Ionicons name="camera-reverse" size={24} color="#fff" />
           <Text style={styles.buttonText}>Flip</Text>
         </TouchableOpacity>

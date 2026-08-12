@@ -1,6 +1,6 @@
+import { onAuthStateChanged } from 'firebase/auth';
 import React, { createContext, useContext, useEffect, useState } from 'react';
-import { onAuthStateChanged } from 'firebase/auth/react-native';
-import { auth } from '../config/firebase';
+import { getAuthInstance } from '../config/firebase';
 import { getUserRole, UserRole } from '../services/authService';
 
 interface AuthContextType {
@@ -35,6 +35,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const [loading, setLoading] = useState(true);
 
   const refreshUserRole = async () => {
+    const auth = getAuthInstance();
     if (!auth.currentUser) {
       setUserRole(null);
       return;
@@ -45,6 +46,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   };
 
   useEffect(() => {
+    const auth = getAuthInstance();
     const unsubscribe = onAuthStateChanged(auth, async (firebaseUser) => {
       setUser(firebaseUser);
 

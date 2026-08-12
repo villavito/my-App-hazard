@@ -1,4 +1,5 @@
 import {
+    addDoc,
     collection,
     deleteDoc,
     doc,
@@ -83,15 +84,20 @@ export const getUserIncidents = async (userId: string) => {
   try {
     const hazardsQuery = query(
       collection(db, 'incidents'),
-      where('userId', '==', userId),
-      orderBy('createdAt', 'desc')
+      where('userId', '==', userId)
     );
     const querySnapshot = await getDocs(hazardsQuery);
     
-    const hazards = querySnapshot.docs.map(doc => ({
-      id: doc.id,
-      ...doc.data()
-    }));
+    const hazards = querySnapshot.docs
+      .map(doc => ({
+        id: doc.id,
+        ...doc.data()
+      }))
+      .sort((a: any, b: any) => {
+        const aTime = a.createdAt?.toDate?.()?.getTime() ?? 0;
+        const bTime = b.createdAt?.toDate?.()?.getTime() ?? 0;
+        return bTime - aTime;
+      });
     
     return { success: true, data: hazards };
   } catch (error) {
@@ -121,11 +127,25 @@ export const getAllIncidents = async (limitCount = 50) => {
   }
 };
 
+export const getIncidentById = async (incidentId: string) => {
+  try {
+    const incidentRef = doc(db, 'incidents', incidentId);
+    const incidentDoc = await getDoc(incidentRef);
+    if (incidentDoc.exists()) {
+      return { success: true, data: { id: incidentDoc.id, ...incidentDoc.data() } };
+    }
+    return { success: false, error: 'Incident not found' };
+  } catch (error) {
+    console.error('Error getting incident by id:', error);
+    return { success: false, error };
+  }
+};
+
 export const getIncidentsByAgency = async (agency: string, limitCount = 50) => {
   try {
     const incidentsQuery = query(
       collection(db, 'incidents'),
-      where('agency', '==', agency)
+      where('involvedAgency', '==', agency)
     );
     const querySnapshot = await getDocs(incidentsQuery);
 
@@ -164,8 +184,8 @@ export const getAgencyIncidentCounts = async () => {
     };
 
     incidents.forEach((incident: any) => {
-      if (incident.agency && counts[incident.agency] !== undefined) {
-        counts[incident.agency] += 1;
+      if (incident.involvedAgency && counts[incident.involvedAgency] !== undefined) {
+        counts[incident.involvedAgency] += 1;
       }
     });
 
@@ -179,13 +199,82 @@ export const getAgencyIncidentCounts = async () => {
 export const updateIncidentStatus = async (incidentId: string, status: string) => {
   try {
     const incidentRef = doc(db, 'incidents', incidentId);
+    const incidentSnap = await getDoc(incidentRef);
+
     await updateDoc(incidentRef, {
       status,
       updatedAt: serverTimestamp()
     });
+
+    if (incidentSnap.exists()) {
+      const incident = incidentSnap.data() as any;
+      if (incident.userId) {
+        const agency = incident.involvedAgency;
+        await addDoc(collection(db, 'notifications'), {
+          userId: incident.userId,
+          incidentId,
+          agency: agency ?? null,
+          status,
+          title: agency ? `${agency} Report Update` : 'Report Update',
+          message: `Your ${agency ? `${agency} ` : ''}incident report is now ${status.replace('_', ' ')}.`,
+          read: false,
+          createdAt: serverTimestamp(),
+        });
+      }
+    }
+
     return { success: true };
   } catch (error) {
     console.error('Error updating incident status:', error);
+    return { success: false, error };
+  }
+};
+
+// Notification Services
+export const getUserNotifications = async (userId: string) => {
+  try {
+    const notificationsQuery = query(
+      collection(db, 'notifications'),
+      where('userId', '==', userId)
+    );
+    const querySnapshot = await getDocs(notificationsQuery);
+
+    const notifications = querySnapshot.docs
+      .map((docSnap) => ({ id: docSnap.id, ...docSnap.data() }))
+      .sort((a: any, b: any) => {
+        const aTime = a.createdAt?.toDate?.()?.getTime() ?? 0;
+        const bTime = b.createdAt?.toDate?.()?.getTime() ?? 0;
+        return bTime - aTime;
+      });
+
+    return { success: true, data: notifications };
+  } catch (error) {
+    console.error('Error getting user notifications:', error);
+    return { success: false, error };
+  }
+};
+
+export const markNotificationRead = async (notificationId: string) => {
+  try {
+    await updateDoc(doc(db, 'notifications', notificationId), { read: true });
+    return { success: true };
+  } catch (error) {
+    console.error('Error marking notification read:', error);
+    return { success: false, error };
+  }
+};
+
+export const markAllNotificationsRead = async (userId: string) => {
+  try {
+    const result = await getUserNotifications(userId);
+    if (!result.success || !result.data) {
+      return { success: false, error: result.error };
+    }
+    const unread = (result.data as any[]).filter((n) => !n.read);
+    await Promise.all(unread.map((n) => updateDoc(doc(db, 'notifications', n.id), { read: true })));
+    return { success: true };
+  } catch (error) {
+    console.error('Error marking all notifications read:', error);
     return { success: false, error };
   }
 };

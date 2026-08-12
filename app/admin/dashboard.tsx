@@ -1,287 +1,99 @@
-import { Ionicons } from '@expo/vector-icons';
-import { useRouter } from 'expo-router';
-import { useEffect, useState } from 'react';
-import { ScrollView, StyleSheet, Text, TouchableOpacity, useColorScheme, View } from 'react-native';
-import { SafeAreaView } from 'react-native-safe-area-context';
-import { AGENCIES, AGENCY_COLORS, AGENCY_LABELS } from '../../constants/agencies';
-import { useAuth } from '../../contexts/AuthContext';
-import { signOutUser } from '../../services/authService';
-import { getAgencyIncidentCounts, getAllUsers } from '../../services/firestoreService';
+import React from "react";
+import { StyleSheet, Text, useColorScheme, View } from "react-native";
+import { SafeAreaView } from "react-native-safe-area-context";
+import { useAuth } from "../../contexts/AuthContext";
 
 export default function AdminDashboard() {
   const colorScheme = useColorScheme();
-  const isDark = colorScheme === 'dark';
-  const router = useRouter();
-  const { user, userRole } = useAuth();
+  const isDark = colorScheme === "dark";
+  const { userRole } = useAuth();
+
+  const isSuperAdmin = userRole?.role === "super_admin";
 
   const styles = StyleSheet.create({
     container: {
       flex: 1,
-      backgroundColor: isDark ? '#000' : '#fff',
+      backgroundColor: isDark ? "#0a0a0f" : "#f0f2f5",
     },
     header: {
-      padding: 20,
-      paddingTop: 40,
-      backgroundColor: isDark ? '#1a1a1a' : '#f8f9fa',
-      alignItems: 'center',
+      paddingHorizontal: 20,
+      paddingTop: 16,
+      paddingBottom: 20,
+      backgroundColor: isDark ? "#1a1a2e" : "#ffffff",
+      borderBottomLeftRadius: 24,
+      borderBottomRightRadius: 24,
+      elevation: 4,
+      shadowColor: "#000",
+      shadowOffset: { width: 0, height: 2 },
+      shadowOpacity: 0.1,
+      shadowRadius: 8,
+    },
+    headerTop: {
+      flexDirection: "row",
+      justifyContent: "space-between",
+      alignItems: "flex-start",
     },
     welcomeText: {
       fontSize: 24,
-      fontWeight: 'bold',
-      color: isDark ? '#fff' : '#000',
-      marginBottom: 8,
+      fontWeight: "800",
+      color: isDark ? "#fff" : "#1a1a2e",
     },
-    subtitle: {
-      fontSize: 16,
-      color: isDark ? '#888' : '#666',
-    },
-    content: {
-      flex: 1,
-      padding: 20,
-    },
-    section: {
-      marginBottom: 24,
-    },
-    sectionTitle: {
-      fontSize: 20,
-      fontWeight: '600',
-      color: isDark ? '#fff' : '#000',
-      marginBottom: 16,
-    },
-    card: {
-      backgroundColor: isDark ? '#2a2a2a' : '#f8f9fa',
-      padding: 16,
-      borderRadius: 12,
-      marginBottom: 12,
-      flexDirection: 'row',
-      alignItems: 'center',
-    },
-    cardIcon: {
-      fontSize: 24,
-      marginRight: 16,
-      color: '#007AFF',
-    },
-    cardContent: {
-      flex: 1,
-    },
-    cardTitle: {
-      fontSize: 16,
-      fontWeight: '600',
-      color: isDark ? '#fff' : '#000',
-      marginBottom: 4,
-    },
-    cardDescription: {
+    welcomeSubtext: {
       fontSize: 14,
-      color: isDark ? '#888' : '#666',
+      color: isDark ? "#888" : "#666",
+      marginTop: 4,
     },
-    statsContainer: {
-      flexDirection: 'row',
-      justifyContent: 'space-between',
-      marginBottom: 24,
+    headerBadge: {
+      backgroundColor: isSuperAdmin ? "#FF3B30" : "#007AFF",
+      paddingHorizontal: 14,
+      paddingVertical: 6,
+      borderRadius: 20,
     },
-    statCard: {
-      backgroundColor: isDark ? '#2a2a2a' : '#f8f9fa',
-      padding: 16,
-      borderRadius: 12,
-      flex: 1,
-      marginHorizontal: 4,
-      alignItems: 'center',
-    },
-    statNumber: {
-      fontSize: 24,
-      fontWeight: 'bold',
-      color: '#007AFF',
-      marginBottom: 4,
-    },
-    statLabel: {
-      fontSize: 14,
-      color: isDark ? '#888' : '#666',
-      textAlign: 'center',
-    },
-    adminBadge: {
-      backgroundColor: '#007AFF',
-      paddingHorizontal: 12,
-      paddingVertical: 4,
-      borderRadius: 12,
-      marginTop: 8,
-    },
-    adminBadgeText: {
-      color: '#fff',
+    headerBadgeText: {
+      color: "#fff",
       fontSize: 12,
-      fontWeight: '600',
+      fontWeight: "700",
     },
-    logoutButton: {
-      backgroundColor: '#FF3B30',
-      paddingVertical: 16,
-      paddingHorizontal: 32,
-      borderRadius: 12,
-      alignItems: 'center',
-      marginTop: 20,
-    },
-    logoutButtonText: {
-      color: '#fff',
-      fontSize: 18,
-      fontWeight: '600',
-    },
-    agencyCard: {
-      borderLeftWidth: 4,
-      marginBottom: 10,
-    },
-    agencyCount: {
-      fontSize: 22,
-      fontWeight: 'bold',
-      color: '#007AFF',
-      marginRight: 12,
-      minWidth: 28,
-      textAlign: 'center',
+    dateText: {
+      fontSize: 13,
+      color: isDark ? "#888" : "#999",
+      marginTop: 12,
     },
   });
-
-  const [totalUsers, setTotalUsers] = useState(0);
-  const [agencyCounts, setAgencyCounts] = useState<Record<string, number>>({
-    PNP: 0,
-    BFP: 0,
-    RHU: 0,
-    BDRRMC: 0,
-  });
-
-  useEffect(() => {
-    const loadStats = async () => {
-      const [usersResult, countsResult] = await Promise.all([
-        getAllUsers(),
-        getAgencyIncidentCounts(),
-      ]);
-
-      if (usersResult.success && usersResult.data) {
-        setTotalUsers(usersResult.data.length);
-      }
-
-      if (countsResult.success && countsResult.data) {
-        setAgencyCounts(countsResult.data);
-      }
-    };
-
-    loadStats();
-  }, []);
-
-  const handleLogout = async () => {
-    await signOutUser();
-    router.replace('/login');
-  };
-
-  const adminFeatures = [
-    {
-      icon: 'people-outline',
-      title: 'User Management',
-      description: 'Manage user accounts and permissions',
-    },
-    {
-      icon: 'shield-checkmark-outline',
-      title: 'Incident Reports',
-      description: 'Review and manage incident reports',
-      route: '/admin/incidents',
-    },
-    {
-      icon: 'analytics-outline',
-      title: 'Analytics',
-      description: 'View system analytics and reports',
-    },
-    {
-      icon: 'notifications-outline',
-      title: 'Alert Management',
-      description: 'Configure and manage safety alerts',
-    },
-    {
-      icon: 'settings-outline',
-      title: 'System Settings',
-      description: 'Configure system parameters',
-    },
-    {
-      icon: 'document-text-outline',
-      title: 'Reports',
-      description: 'Generate and view reports',
-    },
-  ];
 
   return (
     <SafeAreaView style={styles.container}>
-      <ScrollView showsVerticalScrollIndicator={false}>
-        <View style={styles.header}>
-          <Text style={styles.welcomeText}>
-            Admin Dashboard
-          </Text>
-          <Text style={styles.subtitle}>{userRole?.displayName || 'Admin'}</Text>
-          <View style={styles.adminBadge}>
-            <Text style={styles.adminBadgeText}>ADMIN</Text>
+      {/* Header */}
+      <View style={styles.header}>
+        <View style={styles.headerTop}>
+          <View>
+            <Text style={styles.welcomeText}>
+              Welcome back,{"\n"}
+              {userRole?.displayName?.split(" ")[0] || "Admin"}
+            </Text>
+            <Text style={styles.welcomeSubtext}>
+              Here&apos;s what&apos;s happening today
+            </Text>
+          </View>
+          <View style={styles.headerBadge}>
+            <Text style={styles.headerBadgeText}>
+              {isSuperAdmin
+                ? "SUPER ADMIN"
+                : userRole?.agency
+                  ? `${userRole.agency} ADMIN`
+                  : "ADMIN"}
+            </Text>
           </View>
         </View>
-
-        <View style={styles.content}>
-          <View style={styles.statsContainer}>
-            <View style={styles.statCard}>
-              <Text style={styles.statNumber}>{totalUsers}</Text>
-              <Text style={styles.statLabel}>Total Users</Text>
-            </View>
-            <View style={styles.statCard}>
-              <Text style={styles.statNumber}>
-                {Object.values(agencyCounts).reduce((sum, count) => sum + count, 0)}
-              </Text>
-              <Text style={styles.statLabel}>Reports</Text>
-            </View>
-          </View>
-
-          <View style={styles.section}>
-            <Text style={styles.sectionTitle}>Agency Reports</Text>
-            {AGENCIES.map((agency) => (
-              <TouchableOpacity
-                key={agency}
-                style={[styles.card, styles.agencyCard, { borderLeftColor: AGENCY_COLORS[agency] }]}
-                onPress={() => router.push({ pathname: '/admin/incidents', params: { agency } })}
-              >
-                <Text style={styles.agencyCount}>{agencyCounts[agency] ?? 0}</Text>
-                <Ionicons name="shield-outline" size={24} style={styles.cardIcon} />
-                <View style={styles.cardContent}>
-                  <Text style={styles.cardTitle}>{agency}</Text>
-                  <Text style={styles.cardDescription}>{AGENCY_LABELS[agency]}</Text>
-                </View>
-                <Ionicons name="chevron-forward" size={20} color={isDark ? '#888' : '#666'} />
-              </TouchableOpacity>
-            ))}
-          </View>
-
-          <View style={styles.section}>
-            <Text style={styles.sectionTitle}>Admin Tools</Text>
-            {adminFeatures.map((feature, index) => (
-              <TouchableOpacity
-                key={index}
-                style={styles.card}
-                onPress={() => feature.route && router.push(feature.route as any)}
-              >
-                <Ionicons name={feature.icon as keyof typeof Ionicons.glyphMap} size={24} style={styles.cardIcon} />
-                <View style={styles.cardContent}>
-                  <Text style={styles.cardTitle}>{feature.title}</Text>
-                  <Text style={styles.cardDescription}>{feature.description}</Text>
-                </View>
-              </TouchableOpacity>
-            ))}
-          </View>
-
-          <View style={styles.section}>
-            <Text style={styles.sectionTitle}>Account</Text>
-            <TouchableOpacity style={styles.card} onPress={() => router.push('/profile')}>
-              <Ionicons name="person" size={24} style={styles.cardIcon} />
-              <View style={styles.cardContent}>
-                <Text style={styles.cardTitle}>Profile</Text>
-                <Text style={styles.cardDescription}>Manage your profile information</Text>
-              </View>
-            </TouchableOpacity>
-          </View>
-
-          <TouchableOpacity style={styles.logoutButton} onPress={handleLogout}>
-            <Text style={styles.logoutButtonText}>Sign Out</Text>
-          </TouchableOpacity>
-        </View>
-      </ScrollView>
+        <Text style={styles.dateText}>
+          {new Date().toLocaleDateString("en-US", {
+            weekday: "long",
+            year: "numeric",
+            month: "long",
+            day: "numeric",
+          })}
+        </Text>
+      </View>
     </SafeAreaView>
   );
 }

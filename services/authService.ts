@@ -3,15 +3,17 @@ import {
   signInWithEmailAndPassword,
   signOut,
   updateProfile,
-} from 'firebase/auth/react-native';
+} from 'firebase/auth';
 import { doc, getDoc, serverTimestamp, setDoc } from 'firebase/firestore';
-import { auth, db } from '../config/firebase';
+import { db, getAuthInstance } from '../config/firebase';
 
 export interface UserRole {
   uid: string;
   email: string;
   displayName: string;
   role: 'user' | 'admin' | 'super_admin';
+  // Which agency's inbox this admin can see. Unset (e.g. for super_admin) means no agency is restricted.
+  agency?: 'PNP' | 'BFP' | 'Barangay';
   createdAt: any;
   lastLogin: any;
 }
@@ -21,9 +23,11 @@ export const createUserWithRole = async (
   email: string,
   password: string,
   displayName: string,
-  role: 'user' | 'admin' | 'super_admin' = 'user'
+  role: 'user' | 'admin' | 'super_admin' = 'user',
+  agency?: 'PNP' | 'BFP' | 'Barangay'
 ) => {
   try {
+    const auth = getAuthInstance();
     const userCredential = await createUserWithEmailAndPassword(auth, email, password);
     const user = userCredential.user;
 
@@ -35,6 +39,7 @@ export const createUserWithRole = async (
       email: user.email ?? email,
       displayName,
       role,
+      ...(agency ? { agency } : {}),
       createdAt: serverTimestamp(),
       lastLogin: serverTimestamp(),
     };
@@ -53,6 +58,7 @@ export const createUserWithRole = async (
 // Sign in user
 export const signInUser = async (email: string, password: string) => {
   try {
+    const auth = getAuthInstance();
     const userCredential = await signInWithEmailAndPassword(auth, email, password);
     const user = userCredential.user;
 
@@ -78,6 +84,7 @@ export const signInUser = async (email: string, password: string) => {
 
 export const signOutUser = async () => {
   try {
+    const auth = getAuthInstance();
     await signOut(auth);
     return { success: true };
   } catch (error: any) {

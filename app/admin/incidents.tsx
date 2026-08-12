@@ -1,22 +1,26 @@
-import { Ionicons } from '@expo/vector-icons';
-import { useLocalSearchParams, useRouter } from 'expo-router';
-import { useCallback, useEffect, useState } from 'react';
+import { Ionicons } from "@expo/vector-icons";
+import { Image } from "expo-image";
+import { useLocalSearchParams, useRouter } from "expo-router";
+import { useVideoPlayer, type VideoThumbnail as VideoThumbnailImage } from "expo-video";
+import * as React from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import {
   ActivityIndicator,
-  Alert,
   FlatList,
-  Image,
   RefreshControl,
   StyleSheet,
   Text,
   TouchableOpacity,
   useColorScheme,
   View,
-} from 'react-native';
-import type { AlertButton } from 'react-native';
-import { SafeAreaView } from 'react-native-safe-area-context';
-import { AGENCIES, Agency, AGENCY_COLORS, AGENCY_LABELS } from '../../constants/agencies';
-import { getIncidentsByAgency, updateIncidentStatus } from '../../services/firestoreService';
+} from "react-native";
+import { SafeAreaView } from "react-native-safe-area-context";
+import { AGENCY_COLORS } from "../../constants/agencies";
+import { useAuth } from "../../contexts/AuthContext";
+import { getIncidentsByAgency } from "../../services/firestoreService";
+
+const INBOX_AGENCIES = ["PNP", "BFP", "Barangay"] as const;
+type InboxAgency = (typeof INBOX_AGENCIES)[number];
 
 type Incident = {
   id: string;
@@ -26,155 +30,254 @@ type Incident = {
   injuryLevel?: string;
   location?: string;
   status?: string;
-  imageUrl?: string;
+  videoUrl?: string;
+  involvedAgency?: string;
   createdAt?: { toDate: () => Date };
 };
 
-const STATUS_OPTIONS = ['pending', 'in_progress', 'resolved'] as const;
+const STATUS_FILTERS = ["all", "pending", "in_progress", "resolved"] as const;
 
 function formatDate(createdAt?: { toDate: () => Date }) {
-  if (!createdAt?.toDate) return 'Unknown date';
+  if (!createdAt?.toDate) return "Unknown date";
   return createdAt.toDate().toLocaleString();
 }
 
 function getStatusColor(status?: string) {
-  if (status === 'resolved') return '#34C759';
-  if (status === 'in_progress') return '#FF9500';
-  return '#FF3B30';
+  if (status === "resolved") return "#34C759";
+  if (status === "in_progress") return "#FF9500";
+  return "#FF3B30";
+}
+
+const thumbnailLoadingStyle = {
+  alignItems: "center" as const,
+  justifyContent: "center" as const,
+  backgroundColor: "#000",
+};
+
+function VideoThumbnail({
+  uri,
+  style,
+  overlayStyle,
+  onPress,
+}: {
+  uri: string;
+  style: object;
+  overlayStyle: object;
+  onPress: () => void;
+}) {
+  const player = useVideoPlayer(uri);
+  const [thumbnail, setThumbnail] = useState<VideoThumbnailImage | null>(null);
+
+  useEffect(() => {
+    let cancelled = false;
+
+    // On web, generateThumbnailsAsync can throw synchronously (e.g. a CORS
+    // "tainted canvas" error on cross-origin video URLs) instead of rejecting
+    // a promise, which would otherwise bypass the .catch() below entirely.
+    try {
+      Promise.resolve(player.generateThumbnailsAsync(0))
+        .then(([frame]) => {
+          if (!cancelled) setThumbnail(frame);
+        })
+        .catch((error) => {
+          console.warn("Error generating video thumbnail:", error);
+        });
+    } catch (error) {
+      console.warn("Error generating video thumbnail:", error);
+    }
+
+    return () => {
+      cancelled = true;
+    };
+  }, [player]);
+
+  return (
+    <TouchableOpacity style={style} onPress={onPress} activeOpacity={0.8}>
+      {thumbnail ? (
+        <Image
+          source={thumbnail}
+          style={StyleSheet.absoluteFill}
+          contentFit="cover"
+        />
+      ) : (
+        <View style={[StyleSheet.absoluteFill, thumbnailLoadingStyle]}>
+          <ActivityIndicator size="small" color="#fff" />
+        </View>
+      )}
+      <View style={overlayStyle}>
+        <Ionicons name="play-circle" size={36} color="#fff" />
+      </View>
+    </TouchableOpacity>
+  );
 }
 
 export default function AdminIncidentsScreen() {
   const colorScheme = useColorScheme();
-  const isDark = colorScheme === 'dark';
+  const isDark = colorScheme === "dark";
   const router = useRouter();
-  const params = useLocalSearchParams<{ agency?: string }>();
-  const initialAgency = AGENCIES.includes(params.agency as Agency) ? (params.agency as Agency) : 'PNP';
+  const params = useLocalSearchParams<{ status?: string }>();
+  const { user, userRole } = useAuth();
 
-  const [selectedAgency, setSelectedAgency] = useState<Agency>(initialAgency);
+  // Agency-scoped admins (e.g. the PNP admin account) can only ever see their own
+  // agency's inbox. Admins with no assigned agency (e.g. super_admin) can see both.
+  const restrictedAgency = userRole?.agency;
+  const visibleAgencies = useMemo<readonly InboxAgency[]>(
+    () => (restrictedAgency ? [restrictedAgency] : INBOX_AGENCIES),
+    [restrictedAgency],
+  );
+
   const [incidents, setIncidents] = useState<Incident[]>([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
+  const [statusFilter, setStatusFilter] = useState<string>(
+    params.status || "all",
+  );
 
-  const loadIncidents = useCallback(async (agency: Agency, isRefresh = false) => {
-    if (isRefresh) {
-      setRefreshing(true);
-    } else {
-      setLoading(true);
-    }
+  const loadIncidents = useCallback(
+    async (isRefresh = false) => {
+      // Firestore rules require request.auth to be populated; querying before
+      // Firebase Auth has restored the session returns a permission error even
+      // for a valid admin, so wait until the session is confirmed.
+      if (!user) return;
 
-    const result = await getIncidentsByAgency(agency);
-    if (result.success && result.data) {
-      setIncidents(result.data as Incident[]);
-    } else {
-      setIncidents([]);
-    }
+      if (isRefresh) {
+        setRefreshing(true);
+      } else {
+        setLoading(true);
+      }
 
-    setLoading(false);
-    setRefreshing(false);
-  }, []);
+      const results = await Promise.all(
+        visibleAgencies.map((agency) => getIncidentsByAgency(agency)),
+      );
+      const merged = results
+        .filter((result) => result.success && result.data)
+        .flatMap((result) => result.data as Incident[])
+        .sort((a, b) => {
+          const aTime = a.createdAt?.toDate?.().getTime() ?? 0;
+          const bTime = b.createdAt?.toDate?.().getTime() ?? 0;
+          return bTime - aTime;
+        });
+      setIncidents(merged);
+
+      setLoading(false);
+      setRefreshing(false);
+    },
+    [visibleAgencies, user],
+  );
 
   useEffect(() => {
-    loadIncidents(selectedAgency);
-  }, [selectedAgency, loadIncidents]);
+    loadIncidents();
+  }, [loadIncidents]);
 
-  const handleStatusUpdate = (incident: Incident) => {
-    const statusButtons: AlertButton[] = STATUS_OPTIONS.map((status) => ({
-      text: status.replace('_', ' ').toUpperCase(),
-      onPress: async () => {
-        const result = await updateIncidentStatus(incident.id, status);
-        if (result.success) {
-          loadIncidents(selectedAgency, true);
-        } else {
-          Alert.alert('Error', 'Failed to update status');
-        }
-      },
-    }));
-
-    statusButtons.push({ text: 'Cancel', style: 'cancel' });
-
-    Alert.alert(
-      'Update Status',
-      `Change status for "${incident.situation || incident.description}"`,
-      statusButtons
-    );
-  };
+  const filteredIncidents = useMemo(() => {
+    if (statusFilter === "all") return incidents;
+    return incidents.filter((i) => i.status === statusFilter);
+  }, [incidents, statusFilter]);
 
   const styles = StyleSheet.create({
     container: {
       flex: 1,
-      backgroundColor: isDark ? '#000' : '#fff',
+      backgroundColor: isDark ? "#0a0a0f" : "#f0f2f5",
     },
     header: {
       padding: 16,
-      paddingTop: 8,
-      backgroundColor: isDark ? '#1a1a1a' : '#f8f9fa',
+      paddingBottom: 12,
+      backgroundColor: isDark ? "#1a1a2e" : "#ffffff",
+      borderBottomLeftRadius: 16,
+      borderBottomRightRadius: 16,
+      elevation: 2,
+      shadowColor: "#000",
+      shadowOffset: { width: 0, height: 1 },
+      shadowOpacity: 0.1,
+      shadowRadius: 4,
     },
     headerRow: {
-      flexDirection: 'row',
-      alignItems: 'center',
+      flexDirection: "row",
+      alignItems: "center",
       marginBottom: 12,
-    },
-    backButton: {
-      padding: 8,
-      marginRight: 8,
     },
     headerTitle: {
       fontSize: 20,
-      fontWeight: 'bold',
-      color: isDark ? '#fff' : '#000',
+      fontWeight: "bold",
+      color: isDark ? "#fff" : "#1a1a2e",
       flex: 1,
     },
-    agencyTabs: {
-      flexDirection: 'row',
-      gap: 8,
+    // Status Filter
+    statusFilterRow: {
+      flexDirection: "row",
+      gap: 6,
+      marginTop: 10,
     },
-    agencyTab: {
-      flex: 1,
-      paddingVertical: 10,
-      borderRadius: 8,
-      alignItems: 'center',
+    statusPill: {
+      paddingVertical: 6,
+      paddingHorizontal: 12,
+      borderRadius: 16,
+      backgroundColor: isDark ? "#2a2a4e" : "#f0f0f5",
     },
-    agencyTabText: {
+    statusPillActive: {
+      backgroundColor: "#007AFF",
+    },
+    statusPillText: {
       fontSize: 12,
-      fontWeight: '700',
-      color: '#fff',
+      fontWeight: "600",
+      color: isDark ? "#ccc" : "#666",
     },
-    agencySubtitle: {
-      fontSize: 13,
-      color: isDark ? '#888' : '#666',
-      marginTop: 8,
+    statusPillTextActive: {
+      color: "#fff",
     },
+    // List
     listContent: {
       padding: 16,
       paddingBottom: 32,
     },
     emptyContainer: {
-      alignItems: 'center',
+      alignItems: "center",
       paddingTop: 60,
     },
     emptyText: {
       fontSize: 16,
-      color: isDark ? '#888' : '#666',
+      color: isDark ? "#888" : "#666",
       marginTop: 12,
     },
+    // Card
     card: {
-      backgroundColor: isDark ? '#2a2a2a' : '#f8f9fa',
-      borderRadius: 12,
+      backgroundColor: isDark ? "#1a1a2e" : "#ffffff",
+      borderRadius: 14,
       padding: 14,
       marginBottom: 12,
+      elevation: 2,
+      shadowColor: "#000",
+      shadowOffset: { width: 0, height: 1 },
+      shadowOpacity: 0.08,
+      shadowRadius: 4,
     },
     cardHeader: {
-      flexDirection: 'row',
-      justifyContent: 'space-between',
-      alignItems: 'flex-start',
+      flexDirection: "row",
+      justifyContent: "space-between",
+      alignItems: "flex-start",
       marginBottom: 8,
     },
     situation: {
       fontSize: 16,
-      fontWeight: '600',
-      color: isDark ? '#fff' : '#000',
+      fontWeight: "600",
+      color: isDark ? "#fff" : "#000",
       flex: 1,
       marginRight: 8,
+    },
+    cardBadges: {
+      flexDirection: "row",
+      alignItems: "center",
+      gap: 6,
+    },
+    agencyTag: {
+      paddingHorizontal: 8,
+      paddingVertical: 4,
+      borderRadius: 8,
+    },
+    agencyTagText: {
+      color: "#fff",
+      fontSize: 11,
+      fontWeight: "700",
     },
     statusBadge: {
       paddingHorizontal: 8,
@@ -182,53 +285,125 @@ export default function AdminIncidentsScreen() {
       borderRadius: 8,
     },
     statusText: {
-      color: '#fff',
+      color: "#fff",
       fontSize: 11,
-      fontWeight: '700',
-      textTransform: 'uppercase',
+      fontWeight: "700",
+      textTransform: "uppercase",
     },
     metaText: {
       fontSize: 13,
-      color: isDark ? '#aaa' : '#666',
+      color: isDark ? "#aaa" : "#666",
       marginBottom: 4,
     },
     thumbnail: {
-      width: '100%',
+      width: "100%",
       height: 140,
       borderRadius: 8,
       marginTop: 8,
       marginBottom: 8,
+      overflow: "hidden",
     },
-    updateButton: {
+    thumbnailPlayOverlay: {
+      ...StyleSheet.absoluteFillObject,
+      alignItems: "center",
+      justifyContent: "center",
+      backgroundColor: "rgba(0,0,0,0.15)",
+    },
+    cardActions: {
+      flexDirection: "row",
+      gap: 8,
       marginTop: 8,
-      backgroundColor: '#007AFF',
+    },
+    viewDetailButton: {
+      flex: 1,
+      flexDirection: "row",
+      alignItems: "center",
+      justifyContent: "center",
+      gap: 6,
+      backgroundColor: isDark ? "#2a2a4e" : "#e8f0fe",
       paddingVertical: 10,
       borderRadius: 8,
-      alignItems: 'center',
     },
-    updateButtonText: {
-      color: '#fff',
-      fontSize: 14,
-      fontWeight: '600',
+    viewDetailText: {
+      color: "#007AFF",
+      fontSize: 13,
+      fontWeight: "600",
     },
   });
 
   const renderIncident = ({ item }: { item: Incident }) => (
     <View style={styles.card}>
       <View style={styles.cardHeader}>
-        <Text style={styles.situation}>{item.situation || item.description || 'Incident Report'}</Text>
-        <View style={[styles.statusBadge, { backgroundColor: getStatusColor(item.status) }]}>
-          <Text style={styles.statusText}>{(item.status || 'pending').replace('_', ' ')}</Text>
+        <Text style={styles.situation}>
+          {item.situation || item.description || "Incident Report"}
+        </Text>
+        <View style={styles.cardBadges}>
+          {item.involvedAgency && (
+            <View
+              style={[
+                styles.agencyTag,
+                {
+                  backgroundColor:
+                    AGENCY_COLORS[
+                      item.involvedAgency as keyof typeof AGENCY_COLORS
+                    ] || "#999",
+                },
+              ]}
+            >
+              <Text style={styles.agencyTagText}>{item.involvedAgency}</Text>
+            </View>
+          )}
+          <View
+            style={[
+              styles.statusBadge,
+              { backgroundColor: getStatusColor(item.status) },
+            ]}
+          >
+            <Text style={styles.statusText}>
+              {(item.status || "pending").replace("_", " ")}
+            </Text>
+          </View>
         </View>
       </View>
-      <Text style={styles.metaText}>Reporter: {item.userEmail || 'Unknown'}</Text>
-      <Text style={styles.metaText}>Injury Level: {item.injuryLevel || 'Not specified'}</Text>
-      <Text style={styles.metaText}>Location: {item.location || 'Not provided'}</Text>
-      <Text style={styles.metaText}>Submitted: {formatDate(item.createdAt)}</Text>
-      {item.imageUrl ? <Image source={{ uri: item.imageUrl }} style={styles.thumbnail} /> : null}
-      <TouchableOpacity style={styles.updateButton} onPress={() => handleStatusUpdate(item)}>
-        <Text style={styles.updateButtonText}>Update Status</Text>
-      </TouchableOpacity>
+      <Text style={styles.metaText}>
+        Reporter: {item.userEmail || "Unknown"}
+      </Text>
+      <Text style={styles.metaText}>
+        Injury: {item.injuryLevel || "Not specified"}
+      </Text>
+      <Text style={styles.metaText}>
+        Location: {item.location || "Not provided"}
+      </Text>
+      <Text style={styles.metaText}>
+        Submitted: {formatDate(item.createdAt)}
+      </Text>
+      {item.videoUrl ? (
+        <VideoThumbnail
+          uri={item.videoUrl}
+          style={styles.thumbnail}
+          overlayStyle={styles.thumbnailPlayOverlay}
+          onPress={() =>
+            router.push({
+              pathname: "/admin/incident-detail",
+              params: { id: item.id },
+            } as any)
+          }
+        />
+      ) : null}
+      <View style={styles.cardActions}>
+        <TouchableOpacity
+          style={styles.viewDetailButton}
+          onPress={() =>
+            router.push({
+              pathname: "/admin/incident-detail",
+              params: { id: item.id },
+            } as any)
+          }
+        >
+          <Ionicons name="eye-outline" size={16} color="#007AFF" />
+          <Text style={styles.viewDetailText}>View Details</Text>
+        </TouchableOpacity>
+      </View>
     </View>
   );
 
@@ -236,37 +411,31 @@ export default function AdminIncidentsScreen() {
     <SafeAreaView style={styles.container}>
       <View style={styles.header}>
         <View style={styles.headerRow}>
-          <TouchableOpacity style={styles.backButton} onPress={() => router.back()}>
-            <Ionicons name="arrow-back" size={24} color={isDark ? '#fff' : '#000'} />
-          </TouchableOpacity>
-          <Text style={styles.headerTitle}>Incident Reports</Text>
+          <Text style={styles.headerTitle}>Notifications</Text>
         </View>
 
-        <View style={styles.agencyTabs}>
-          {AGENCIES.map((agency) => (
+        {/* Status Filter */}
+        <View style={styles.statusFilterRow}>
+          {STATUS_FILTERS.map((filter) => (
             <TouchableOpacity
-              key={agency}
+              key={filter}
               style={[
-                styles.agencyTab,
-                {
-                  backgroundColor:
-                    selectedAgency === agency ? AGENCY_COLORS[agency] : isDark ? '#333' : '#ddd',
-                },
+                styles.statusPill,
+                statusFilter === filter && styles.statusPillActive,
               ]}
-              onPress={() => setSelectedAgency(agency)}
+              onPress={() => setStatusFilter(filter)}
             >
               <Text
                 style={[
-                  styles.agencyTabText,
-                  selectedAgency !== agency && { color: isDark ? '#ccc' : '#444' },
+                  styles.statusPillText,
+                  statusFilter === filter && styles.statusPillTextActive,
                 ]}
               >
-                {agency}
+                {filter === "all" ? "All" : filter.replace("_", " ")}
               </Text>
             </TouchableOpacity>
           ))}
         </View>
-        <Text style={styles.agencySubtitle}>{AGENCY_LABELS[selectedAgency]}</Text>
       </View>
 
       {loading ? (
@@ -275,20 +444,25 @@ export default function AdminIncidentsScreen() {
         </View>
       ) : (
         <FlatList
-          data={incidents}
+          data={filteredIncidents}
           keyExtractor={(item) => item.id}
           renderItem={renderIncident}
           contentContainerStyle={styles.listContent}
           refreshControl={
             <RefreshControl
               refreshing={refreshing}
-              onRefresh={() => loadIncidents(selectedAgency, true)}
+              onRefresh={() => loadIncidents(true)}
+              tintColor="#007AFF"
             />
           }
           ListEmptyComponent={
             <View style={styles.emptyContainer}>
-              <Ionicons name="document-text-outline" size={48} color={isDark ? '#555' : '#ccc'} />
-              <Text style={styles.emptyText}>No {selectedAgency} reports yet</Text>
+              <Ionicons
+                name="document-text-outline"
+                size={48}
+                color={isDark ? "#555" : "#ccc"}
+              />
+              <Text style={styles.emptyText}>No reports yet</Text>
             </View>
           }
         />

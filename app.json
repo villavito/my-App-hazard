@@ -42,14 +42,15 @@
       [
         "expo-image-picker",
         {
-          "photosPermission": "The app needs access to your photos to let you capture incidents.",
-          "cameraPermission": "The app needs access to your camera to capture incident photos."
+          "photosPermission": "The app needs access to your media library to let you upload incident videos.",
+          "cameraPermission": "The app needs access to your camera to capture incident videos."
         }
       ],
       [
         "expo-camera",
         {
-          "cameraPermission": "The app needs access to your camera for real-time incident capture."
+          "cameraPermission": "The app needs access to your camera to record incident videos.",
+          "microphonePermission": "The app needs access to your microphone to record audio with incident videos."
         }
       ],
       [
@@ -57,7 +58,10 @@
         {
           "locationWhenInUsePermission": "Allow $(PRODUCT_NAME) to use your location when reporting incidents."
         }
-      ]
+      ],
+      "expo-video",
+      "expo-font",
+      "expo-web-browser"
     ],
     "experiments": {
       "typedRoutes": true,

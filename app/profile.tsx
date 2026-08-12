@@ -1,11 +1,12 @@
 import { Ionicons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
 import { doc, updateDoc } from 'firebase/firestore';
-import { useState } from 'react';
-import { Alert, StyleSheet, Text, TextInput, TouchableOpacity, useColorScheme, View } from 'react-native';
+import { useEffect, useState } from 'react';
+import { StyleSheet, Text, TextInput, TouchableOpacity, useColorScheme, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { db } from '../config/firebase';
 import { useAuth } from '../contexts/AuthContext';
+import { showAlert } from '../utils/crossPlatformAlert';
 
 export default function ProfileScreen() {
   const colorScheme = useColorScheme();
@@ -14,6 +15,10 @@ export default function ProfileScreen() {
   const { user, userRole } = useAuth();
   const [displayName, setDisplayName] = useState(userRole?.displayName || '');
   const [isLoading, setIsLoading] = useState(false);
+
+  useEffect(() => {
+    setDisplayName(userRole?.displayName || '');
+  }, [userRole]);
 
   const styles = StyleSheet.create({
     container: {
@@ -27,11 +32,6 @@ export default function ProfileScreen() {
       flexDirection: 'row',
       alignItems: 'center',
       gap: 16,
-    },
-    backButton: {
-      padding: 8,
-      borderRadius: 8,
-      backgroundColor: isDark ? '#2a2a2a' : '#e9ecef',
     },
     headerTitle: {
       fontSize: 24,
@@ -134,7 +134,7 @@ export default function ProfileScreen() {
 
   const handleSaveProfile = async () => {
     if (!user || !displayName.trim()) {
-      Alert.alert('Error', 'Please enter a valid name');
+      showAlert('Error', 'Please enter a valid name');
       return;
     }
 
@@ -144,11 +144,11 @@ export default function ProfileScreen() {
         displayName: displayName.trim(),
       });
 
-      Alert.alert('Success', 'Profile updated successfully!');
+      showAlert('Success', 'Profile updated successfully!');
       router.back();
     } catch (error) {
       console.error('Error updating profile:', error);
-      Alert.alert('Error', 'Failed to update profile');
+      showAlert('Error', 'Failed to update profile');
     } finally {
       setIsLoading(false);
     }
@@ -166,9 +166,6 @@ export default function ProfileScreen() {
   return (
     <SafeAreaView style={styles.container}>
       <View style={styles.header}>
-        <TouchableOpacity style={styles.backButton} onPress={() => router.back()}>
-          <Ionicons name="arrow-back" size={24} color={isDark ? '#fff' : '#000'} />
-        </TouchableOpacity>
         <Text style={styles.headerTitle}>Profile</Text>
       </View>
 

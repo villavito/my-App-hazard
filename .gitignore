@@ -32,6 +32,17 @@ yarn-error.*
 
 # local env files
 .env*.local
+backend/.env
+
+# uploaded incident videos (local disk storage, not committed)
+backend/uploads/
+
+# IDE
+.idea/
+
+# secrets
+*serviceAccount*.json
+backend/config/serviceAccountKey.json
 
 # typescript
 *.tsbuildinfo
@@ -41,3 +52,10 @@ app-example
 # generated native folders
 /ios
 /android
+
+# firebase emulator state
+.emulator-data/
+firebase-debug.log
+firestore-debug.log
+ui-debug.log
+storage-debug.log
