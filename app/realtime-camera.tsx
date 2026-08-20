@@ -1,10 +1,12 @@
 import { Ionicons } from '@expo/vector-icons';
 import { CameraView, useCameraPermissions, useMicrophonePermissions } from 'expo-camera';
 import { useRouter } from 'expo-router';
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { StyleSheet, Text, TouchableOpacity, useColorScheme, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { showAlert } from '../utils/crossPlatformAlert';
+
+const MAX_RECORDING_SECONDS = 30;
 
 export default function RealtimeCameraScreen() {
   const colorScheme = useColorScheme();
@@ -13,8 +15,21 @@ export default function RealtimeCameraScreen() {
   const [permission, requestPermission] = useCameraPermissions();
   const [microphonePermission, requestMicrophonePermission] = useMicrophonePermissions();
   const [facing, setFacing] = useState<'back' | 'front'>('back');
+  const [torchOn, setTorchOn] = useState(false);
   const [isRecording, setIsRecording] = useState(false);
+  const [secondsLeft, setSecondsLeft] = useState(MAX_RECORDING_SECONDS);
   const cameraRef = React.useRef<CameraView>(null);
+
+  useEffect(() => {
+    if (!isRecording) return;
+
+    setSecondsLeft(MAX_RECORDING_SECONDS);
+    const interval = setInterval(() => {
+      setSecondsLeft((current) => Math.max(0, current - 1));
+    }, 1000);
+
+    return () => clearInterval(interval);
+  }, [isRecording]);
 
   const styles = StyleSheet.create({
     container: {
@@ -178,6 +193,8 @@ export default function RealtimeCameraScreen() {
   }
 
   const toggleCameraFacing = () => {
+    // Front cameras don't have a flash/torch on virtually any phone.
+    setTorchOn(false);
     setFacing(current => (current === 'back' ? 'front' : 'back'));
   };
 
@@ -186,7 +203,9 @@ export default function RealtimeCameraScreen() {
 
     try {
       setIsRecording(true);
-      const video = await cameraRef.current.recordAsync();
+      const video = await cameraRef.current.recordAsync({
+        maxDuration: MAX_RECORDING_SECONDS,
+      });
 
       if (video?.uri) {
         router.replace({
@@ -214,19 +233,35 @@ export default function RealtimeCameraScreen() {
           <Ionicons name="arrow-back" size={24} color={isRecording ? 'rgba(255,255,255,0.3)' : '#fff'} />
         </TouchableOpacity>
         <Text style={styles.headerTitle}>Record Incident Video</Text>
-        <View style={{ width: 24 }} />
+        {facing === 'back' ? (
+          <TouchableOpacity onPress={() => setTorchOn((current) => !current)}>
+            <Ionicons
+              name={torchOn ? 'flash' : 'flash-off'}
+              size={24}
+              color={torchOn ? '#FFD60A' : '#fff'}
+            />
+          </TouchableOpacity>
+        ) : (
+          <View style={{ width: 24 }} />
+        )}
       </View>
 
       {isRecording && (
         <View style={styles.recordingBadge}>
           <View style={styles.recordingBadgeInner}>
             <View style={styles.recordingDot} />
-            <Text style={styles.recordingText}>Recording...</Text>
+            <Text style={styles.recordingText}>Recording... 0:{String(secondsLeft).padStart(2, '0')}</Text>
           </View>
         </View>
       )}
 
-      <CameraView ref={cameraRef} style={styles.camera} facing={facing} mode="video" />
+      <CameraView
+        ref={cameraRef}
+        style={styles.camera}
+        facing={facing}
+        mode="video"
+        enableTorch={facing === 'back' && torchOn}
+      />
 
       <View style={styles.buttonContainer}>
         <TouchableOpacity

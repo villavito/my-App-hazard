@@ -17,14 +17,13 @@ import {
   View,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
-import { API_BASE_URL } from "../config/api";
+import { API_BASE_URL_CANDIDATES } from "../config/api";
 import { db } from "../config/firebase";
+import { type Agency } from "../constants/agencies";
 import { useAuth } from "../contexts/AuthContext";
+import { getActiveAgencies } from "../services/firestoreService";
 import { showAlert } from "../utils/crossPlatformAlert";
 
-// Backend origin without the "/api" suffix, for building playable video URLs
-// from the relative paths /api/upload-video returns.
-const UPLOAD_ORIGIN = API_BASE_URL.replace(/\/api$/, "");
 
 const INJURY_LEVEL_OPTIONS = [
   "No Injury",
@@ -111,6 +110,12 @@ function DropdownField({
       color: isDark ? "#fff" : "#000",
       fontWeight: "bold",
     },
+    optionsList: {
+      // The container caps itself at 70% of the screen, but a ScrollView sizes
+      // to its content unless told to shrink - without this the option list
+      // overflows the modal and gets clipped instead of scrolling.
+      flexShrink: 1,
+    },
     optionItem: {
       padding: 14,
       borderBottomWidth: 1,
@@ -155,7 +160,12 @@ function DropdownField({
                 <Text style={styles.closeButton}>×</Text>
               </TouchableOpacity>
             </View>
-            <ScrollView showsVerticalScrollIndicator={false}>
+            <ScrollView
+              style={styles.optionsList}
+              showsVerticalScrollIndicator
+              nestedScrollEnabled
+              keyboardShouldPersistTaps="handled"
+            >
               {options.map((option) => (
                 <TouchableOpacity
                   key={option}
@@ -196,11 +206,22 @@ export default function CaptureIncidentScreen() {
     latitude: number;
     longitude: number;
   } | null>(null);
-  const [submittingAgency, setSubmittingAgency] = useState<
-    "PNP" | "BFP" | "Barangay" | null
-  >(null);
+  const [submittingAgency, setSubmittingAgency] = useState<Agency | null>(
+    null,
+  );
   const [uploadProgress, setUploadProgress] = useState(0);
   const [isLocating, setIsLocating] = useState(false);
+  const [activeAgencies, setActiveAgencies] = useState<Agency[]>([]);
+  const [selectedAgency, setSelectedAgency] = useState<Agency | "">("");
+
+  useEffect(() => {
+    // Firebase Auth restores the session asynchronously on app start, so
+    // wait for a signed-in user before querying - the agencies read rule
+    // requires request.auth != null and would otherwise silently fail here
+    // before the session finishes loading.
+    if (!user) return;
+    getActiveAgencies().then(setActiveAgencies);
+  }, [user]);
 
   useEffect(() => {
     if (params.videoUri) {
@@ -380,15 +401,42 @@ export default function CaptureIncidentScreen() {
     }
   };
 
+  // getCurrentPositionAsync has no built-in timeout, so on a device/emulator
+  // that never produces a GPS fix (common on emulators without a mocked
+  // location) it can hang indefinitely instead of failing. Race it against a
+  // timer so the fallback to the last-known position kicks in promptly.
+  const withTimeout = <T,>(
+    promise: Promise<T>,
+    ms: number,
+    timeoutMessage: string,
+  ): Promise<T> =>
+    Promise.race([
+      promise,
+      new Promise<T>((_, reject) =>
+        setTimeout(() => reject(new Error(timeoutMessage)), ms),
+      ),
+    ]);
+
   const searchMyLocation = async () => {
     setIsLocating(true);
     try {
       const { status } = await Location.requestForegroundPermissionsAsync();
       if (status !== "granted") {
-        showAlert(
-          "Location Required",
-          "Please turn on location and allow access so we can find your current position.",
-        );
+        // On web, once the browser itself reports the permission as denied,
+        // JS can't reopen that prompt - the "Search My Location" button will
+        // otherwise keep failing silently with no way to recover short of
+        // the user finding the browser's own site-permission UI.
+        if (Platform.OS === "web" && status === "denied") {
+          showAlert(
+            "Location Blocked",
+            "Your browser has blocked location for this site. Click the lock/site-info icon next to the address bar, set Location to Allow, then reload the page.",
+          );
+        } else {
+          showAlert(
+            "Location Required",
+            "Please turn on location and allow access so we can find your current position.",
+          );
+        }
         return;
       }
 
@@ -397,10 +445,12 @@ export default function CaptureIncidentScreen() {
         showAlert(
           "Location Services Off",
           "Turn on your device location services, then try searching your location again.",
-          [
-            { text: "Cancel", style: "cancel" },
-            { text: "Open Settings", onPress: () => Linking.openSettings() },
-          ],
+          Platform.OS === "web"
+            ? undefined
+            : [
+                { text: "Cancel", style: "cancel" },
+                { text: "Open Settings", onPress: () => Linking.openSettings() },
+              ],
         );
         return;
       }
@@ -408,10 +458,14 @@ export default function CaptureIncidentScreen() {
       let position: Location.LocationObject | null = null;
 
       try {
-        position = await Location.getCurrentPositionAsync({
-          accuracy: Location.Accuracy.Balanced,
-          mayShowUserSettingsDialog: true,
-        });
+        position = await withTimeout(
+          Location.getCurrentPositionAsync({
+            accuracy: Location.Accuracy.Balanced,
+            mayShowUserSettingsDialog: true,
+          }),
+          10000,
+          "Timed out waiting for a GPS fix",
+        );
       } catch (currentLocationError) {
         console.warn(
           "Current location unavailable, trying last known location:",
@@ -468,12 +522,17 @@ export default function CaptureIncidentScreen() {
     }
   };
 
-  const canSubmit = Boolean(video && injuryLevel);
+  const canSubmit = Boolean(video && injuryLevel && selectedAgency);
   const isUploading = submittingAgency !== null;
 
   // The captured video only exists as a local file/blob URI on this device.
-  // Upload it to our own backend (backend/server.js) so the resulting URL can
-  // be played back from other devices (e.g. the admin web dashboard).
+  // Upload it to our own backend (backend/server.js) so the resulting URL is
+  // playable from other devices (e.g. the admin dashboard). There's no single
+  // host alias that reliably reaches the dev machine from every run target
+  // (physical device vs. standard Android Studio emulator vs. Genymotion vs.
+  // iOS simulator/web), so every known candidate is tried in turn instead of
+  // betting on one guess. A short per-attempt timeout keeps an unreachable
+  // host from stalling the whole upload.
   const uploadVideoToStorage = async (
     localUri: string,
     incidentId: string,
@@ -500,43 +559,89 @@ export default function CaptureIncidentScreen() {
       } as unknown as Blob);
     }
 
-    const relativePath = await new Promise<string>((resolve, reject) => {
-      const xhr = new XMLHttpRequest();
-      xhr.open("POST", `${API_BASE_URL}/upload-video`);
-      xhr.upload.onprogress = (event) => {
-        if (event.lengthComputable) {
-          setUploadProgress(Math.round((event.loaded / event.total) * 100));
-        }
-      };
-      xhr.onload = () => {
-        if (xhr.status >= 200 && xhr.status < 300) {
-          try {
-            const response = JSON.parse(xhr.responseText) as { path: string };
-            resolve(response.path);
-          } catch {
-            reject(new Error("Invalid response from upload server"));
-          }
-        } else {
-          console.error(
-            `Video upload FAILED: ${xhr.status} ${xhr.responseText}`,
-          );
-          reject(
-            new Error(`Upload failed with status ${xhr.status}`),
-          );
-        }
-      };
-      xhr.onerror = () => reject(new Error("Network error during video upload"));
-      xhr.send(formData);
-    });
+    let lastError: Error | null = null;
 
-    return `${UPLOAD_ORIGIN}${relativePath}`;
+    // A failure is often just bad timing (dev server mid-restart, a brief
+    // Wi-Fi hiccup) rather than the backend genuinely being unreachable, so
+    // the whole candidate list gets a few passes with a growing pause
+    // between them before giving up.
+    const MAX_ROUNDS = 3;
+
+    for (let round = 1; round <= MAX_ROUNDS; round += 1) {
+      for (const baseUrl of API_BASE_URL_CANDIDATES) {
+        const uploadUrl = `${baseUrl}/upload-video`;
+        console.log(`Video upload attempt (round ${round}) -> ${uploadUrl}`);
+        setUploadProgress(0);
+
+        try {
+          const relativePath = await new Promise<string>((resolve, reject) => {
+            const xhr = new XMLHttpRequest();
+            xhr.open("POST", uploadUrl);
+            // Longer than the LAN candidates need, since a public tunnel
+            // relays the whole video through an extra hop.
+            xhr.timeout = 20000;
+            xhr.upload.onprogress = (event) => {
+              if (event.lengthComputable) {
+                setUploadProgress(
+                  Math.round((event.loaded / event.total) * 100),
+                );
+              }
+            };
+            xhr.onload = () => {
+              if (xhr.status >= 200 && xhr.status < 300) {
+                try {
+                  const response = JSON.parse(xhr.responseText) as {
+                    path: string;
+                  };
+                  resolve(response.path);
+                } catch {
+                  reject(new Error("Invalid response from upload server"));
+                }
+              } else {
+                console.error(
+                  `Video upload FAILED: ${xhr.status} ${xhr.responseText}`,
+                );
+                reject(new Error(`Upload failed with status ${xhr.status}`));
+              }
+            };
+            xhr.onerror = () =>
+              reject(new Error(`Network error uploading to ${uploadUrl}`));
+            xhr.ontimeout = () =>
+              reject(new Error(`Timed out uploading to ${uploadUrl}`));
+            xhr.send(formData);
+          });
+
+          console.log(`Video upload succeeded via ${baseUrl}`);
+          return `${baseUrl.replace(/\/api$/, "")}${relativePath}`;
+        } catch (error) {
+          lastError = error instanceof Error ? error : new Error(String(error));
+          console.warn(`Upload attempt failed, trying next host:`, lastError.message);
+        }
+      }
+
+      if (round < MAX_ROUNDS) {
+        const delayMs = round * 1500;
+        console.warn(
+          `All hosts failed on round ${round}, retrying in ${delayMs}ms...`,
+        );
+        await new Promise((resolve) => setTimeout(resolve, delayMs));
+      }
+    }
+
+    throw new Error(
+      `Couldn't reach the backend on any known address after ${MAX_ROUNDS} attempts ` +
+        `(tried: ${API_BASE_URL_CANDIDATES.join(", ")}). ` +
+        `Make sure "npm run server" is running on the dev machine and the device is on the same network.` +
+        (lastError ? `\nLast error: ${lastError.message}` : ""),
+    );
   };
 
-  const uploadIncident = async (agency: "PNP" | "BFP" | "Barangay") => {
+  const uploadIncident = async () => {
     if (!canSubmit) {
       const missingFields = [
         !video ? "video" : null,
         !injuryLevel ? "injury level" : null,
+        !selectedAgency ? "agency" : null,
       ].filter(Boolean);
 
       showAlert(
@@ -556,6 +661,12 @@ export default function CaptureIncidentScreen() {
       return;
     }
 
+    if (!selectedAgency) {
+      showAlert("Complete Required Fields", "Please select an agency.");
+      return;
+    }
+
+    const agency = selectedAgency;
     setSubmittingAgency(agency);
     setUploadProgress(0);
     try {
@@ -578,9 +689,12 @@ export default function CaptureIncidentScreen() {
 
       await setDoc(doc(db, "incidents", incidentId), incidentData);
 
-      // Send email notification to the selected agency
+      // Send email notification to the selected agency, reusing whichever
+      // backend host the video upload just proved reachable rather than
+      // re-guessing. Best-effort - shouldn't block a successful report.
       try {
-        await fetch(`${API_BASE_URL}/notify-agency`, {
+        const backendOrigin = new URL(videoUrl).origin;
+        await fetch(`${backendOrigin}/api/notify-agency`, {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
@@ -610,6 +724,10 @@ export default function CaptureIncidentScreen() {
       showAlert(
         "Upload failed",
         `We couldn't submit the incident report.${errorMessage}${errorCode ? `\n(${errorCode})` : ""}`,
+        [
+          { text: "Cancel", style: "cancel" },
+          { text: "Retry", onPress: () => uploadIncident() },
+        ],
       );
     } finally {
       setSubmittingAgency(null);
@@ -715,65 +833,48 @@ export default function CaptureIncidentScreen() {
           isDark={isDark}
         />
 
-        <View style={styles.agencySubmitRow}>
-          <TouchableOpacity
-            style={[
-              styles.uploadButton,
-              styles.agencySubmitButton,
-              (!canSubmit || isUploading) && styles.uploadButtonDisabled,
-            ]}
-            onPress={() => uploadIncident("PNP")}
-            disabled={isUploading}
-          >
-            <Text
-              style={[styles.uploadButtonText, styles.agencySubmitButtonText]}
-            >
-              {submittingAgency === "PNP"
-                ? uploadProgress < 100
-                  ? `Uploading ${uploadProgress}%...`
-                  : "Submitting..."
-                : "Submit to PNP"}
-            </Text>
-          </TouchableOpacity>
-          <TouchableOpacity
-            style={[
-              styles.uploadButton,
-              styles.agencySubmitButton,
-              (!canSubmit || isUploading) && styles.uploadButtonDisabled,
-            ]}
-            onPress={() => uploadIncident("BFP")}
-            disabled={isUploading}
-          >
-            <Text
-              style={[styles.uploadButtonText, styles.agencySubmitButtonText]}
-            >
-              {submittingAgency === "BFP"
-                ? uploadProgress < 100
-                  ? `Uploading ${uploadProgress}%...`
-                  : "Submitting..."
-                : "Submit to BFP"}
-            </Text>
-          </TouchableOpacity>
-          <TouchableOpacity
-            style={[
-              styles.uploadButton,
-              styles.agencySubmitButton,
-              (!canSubmit || isUploading) && styles.uploadButtonDisabled,
-            ]}
-            onPress={() => uploadIncident("Barangay")}
-            disabled={isUploading}
-          >
-            <Text
-              style={[styles.uploadButtonText, styles.agencySubmitButtonText]}
-            >
-              {submittingAgency === "Barangay"
-                ? uploadProgress < 100
-                  ? `Uploading ${uploadProgress}%...`
-                  : "Submitting..."
-                : "Submit to Barangay"}
-            </Text>
-          </TouchableOpacity>
-        </View>
+        {activeAgencies.length > 0 ? (
+          <>
+            <DropdownField
+              label="Agency"
+              value={selectedAgency}
+              placeholder="Select an agency..."
+              options={activeAgencies}
+              onSelect={(value) => setSelectedAgency(value as Agency)}
+              isDark={isDark}
+            />
+
+            <View style={styles.agencySubmitRow}>
+              <TouchableOpacity
+                style={[
+                  styles.uploadButton,
+                  styles.agencySubmitButton,
+                  (!canSubmit || isUploading) && styles.uploadButtonDisabled,
+                ]}
+                onPress={uploadIncident}
+                disabled={isUploading}
+              >
+                <Text
+                  style={[
+                    styles.uploadButtonText,
+                    styles.agencySubmitButtonText,
+                  ]}
+                >
+                  {isUploading
+                    ? uploadProgress < 100
+                      ? `Uploading ${uploadProgress}%...`
+                      : "Submitting..."
+                    : "Submit Report"}
+                </Text>
+              </TouchableOpacity>
+            </View>
+          </>
+        ) : (
+          <Text style={styles.placeholderText}>
+            No agencies are currently accepting reports. Please try again
+            later.
+          </Text>
+        )}
       </ScrollView>
     </SafeAreaView>
   );

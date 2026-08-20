@@ -1,10 +1,30 @@
 rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
-    function isAdmin() {
+    // Repeated get() calls to the same path within one evaluation are cached by
+    // Firestore, so routing every check through this helper costs a single read.
+    function callerData() {
+      return get(/databases/$(database)/documents/users/$(request.auth.uid)).data;
+    }
+
+    function callerExists() {
       return request.auth != null &&
-        exists(/databases/$(database)/documents/users/$(request.auth.uid)) &&
-        get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role in ['admin', 'super_admin'];
+        exists(/databases/$(database)/documents/users/$(request.auth.uid));
+    }
+
+    function isAdmin() {
+      return callerExists() && callerData().role in ['admin', 'super_admin'];
+    }
+
+    function isSuperAdmin() {
+      return callerExists() && callerData().role == 'super_admin';
+    }
+
+    // The agency this admin is scoped to, or null when unset. An admin whose
+    // user doc has no agency matches nothing rather than everything, so a
+    // missing field can't silently widen access to other agencies' reports.
+    function callerAgency() {
+      return callerExists() ? callerData().get('agency', null) : null;
     }
 
     match /users/{userId} {
@@ -16,21 +36,42 @@ service cloud.firestore {
     }
 
     match /incidents/{incidentId} {
+      // Agency isolation is enforced here, not just hidden in the app's queries:
+      // a BFP admin cannot read or modify a PNP report even by querying Firestore
+      // directly. Super admins are exempt and still see everything.
+      function callerOwnsAgency() {
+        return isAdmin() && callerAgency() == resource.data.involvedAgency;
+      }
+
       allow read: if request.auth != null && (
-        request.auth.uid == resource.data.userId || isAdmin()
+        request.auth.uid == resource.data.userId ||
+        isSuperAdmin() ||
+        callerOwnsAgency()
       );
       allow update, delete: if request.auth != null && (
-        request.auth.uid == resource.data.userId || isAdmin()
+        request.auth.uid == resource.data.userId ||
+        isSuperAdmin() ||
+        callerOwnsAgency()
       );
       allow create: if request.auth != null &&
         request.auth.uid == request.resource.data.userId &&
         request.resource.data.keys().hasAll(['id', 'userId', 'userEmail', 'videoUrl', 'injuryLevel', 'location', 'status', 'createdAt']) &&
-        request.resource.data.involvedAgency in ['PNP', 'BFP', 'LDRRMC', 'Barangay'];
+        request.resource.data.involvedAgency in ['PNP', 'BFP', 'LDRRMC', 'Barangay', 'REDCROSS'];
     }
 
     match /notifications/{notificationId} {
-      allow read, update: if request.auth != null && request.auth.uid == resource.data.userId;
+      allow read, update, delete: if request.auth != null && request.auth.uid == resource.data.userId;
       allow create: if request.auth != null && isAdmin();
+    }
+
+    // Tracks which agencies currently have at least one registered admin, so
+    // the report-incident screen can show a submit button only for agencies
+    // that actually have someone watching the inbox.
+    match /agencies/{agencyId} {
+      allow read: if request.auth != null;
+      allow write: if request.auth != null && isAdmin() &&
+        agencyId in ['PNP', 'BFP', 'LDRRMC', 'Barangay', 'REDCROSS'] &&
+        request.resource.data.keys().hasOnly(['active', 'updatedAt']);
     }
   }
 }

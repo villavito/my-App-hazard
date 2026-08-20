@@ -17,12 +17,22 @@ import {
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import {
+  addIncidentComment,
   getIncidentById,
   updateIncidentStatus,
 } from "../../services/firestoreService";
 import { showAlert } from "../../utils/crossPlatformAlert";
 
 const { width: SCREEN_WIDTH } = Dimensions.get("window");
+
+// A report saved before video upload was restored (or one that never
+// reached the backend) can have a file:// path that only ever existed on
+// the reporting phone. Passing that into useVideoPlayer() can throw
+// synchronously trying to open a path that doesn't exist on this device at
+// all, so only ever hand it a fetchable URL.
+function isRemoteVideoUrl(uri: string): boolean {
+  return uri.startsWith("http://") || uri.startsWith("https://");
+}
 
 type Incident = {
   id: string;
@@ -50,8 +60,13 @@ export default function IncidentDetailScreen() {
   const [incident, setIncident] = useState<Incident | null>(null);
   const [loading, setLoading] = useState(true);
   const [comment, setComment] = useState("");
+  const [postingComment, setPostingComment] = useState(false);
 
-  const videoPlayer = useVideoPlayer(incident?.videoUrl ?? null, (player) => {
+  const playableVideoUrl =
+    incident?.videoUrl && isRemoteVideoUrl(incident.videoUrl)
+      ? incident.videoUrl
+      : null;
+  const videoPlayer = useVideoPlayer(playableVideoUrl, (player) => {
     player.loop = false;
   });
 
@@ -116,10 +131,19 @@ export default function IncidentDetailScreen() {
     }
   };
 
-  const handleComment = () => {
-    if (!comment.trim()) return;
-    showAlert("Comment", "Comment added successfully");
-    setComment("");
+  const handleComment = async () => {
+    if (!comment.trim() || !incident) return;
+
+    setPostingComment(true);
+    const result = await addIncidentComment(incident.id, comment.trim());
+    setPostingComment(false);
+
+    if (result.success) {
+      showAlert("Sent", "The reporter has been notified.");
+      setComment("");
+    } else {
+      showAlert("Error", "Failed to send the comment. Please try again.");
+    }
   };
 
   const getStatusColor = (status?: string) => {
@@ -534,7 +558,7 @@ export default function IncidentDetailScreen() {
         </View>
 
         {/* Banner Video */}
-        {incident.videoUrl ? (
+        {playableVideoUrl ? (
           <VideoView
             player={videoPlayer}
             style={styles.imageBanner}
@@ -555,7 +579,9 @@ export default function IncidentDetailScreen() {
                 fontSize: 14,
               }}
             >
-              No video attached
+              {incident.videoUrl
+                ? "Video isn't available on this device"
+                : "No video attached"}
             </Text>
           </View>
         )}
@@ -738,22 +764,28 @@ export default function IncidentDetailScreen() {
             )}
           </View>
 
-          {/* Comments */}
+          {/* Message to reporting user */}
           <View style={styles.commentSection}>
-            <Text style={styles.commentTitle}>Add Comment</Text>
+            <Text style={styles.commentTitle}>Message to User</Text>
             <TextInput
               style={styles.commentInput}
               value={comment}
               onChangeText={setComment}
-              placeholder="Write a comment..."
+              placeholder="Write a message to the reporter..."
               placeholderTextColor={isDark ? "#666" : "#999"}
               multiline
             />
             <TouchableOpacity
-              style={styles.commentButton}
+              style={[
+                styles.commentButton,
+                (postingComment || !comment.trim()) && { opacity: 0.5 },
+              ]}
               onPress={handleComment}
+              disabled={postingComment || !comment.trim()}
             >
-              <Text style={styles.commentButtonText}>Post Comment</Text>
+              <Text style={styles.commentButtonText}>
+                {postingComment ? "Sending..." : "Send Message"}
+              </Text>
             </TouchableOpacity>
           </View>
         </View>

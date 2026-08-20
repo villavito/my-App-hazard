@@ -12,6 +12,7 @@ import {
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { AGENCIES, AGENCY_COLORS } from '../../constants/agencies';
+import { useAuth } from '../../contexts/AuthContext';
 import { getAgencyIncidentCounts, getAllIncidents } from '../../services/firestoreService';
 
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
@@ -33,17 +34,27 @@ export default function ReportsAnalyticsScreen() {
   const colorScheme = useColorScheme();
   const isDark = colorScheme === 'dark';
   const router = useRouter();
+  const { user, userRole } = useAuth();
   const [allIncidents, setAllIncidents] = useState<Incident[]>([]);
   const [selectedTimeframe, setSelectedTimeframe] = useState('week');
   const [loading, setLoading] = useState(true);
 
+  // A super admin reads across every agency; anyone else is limited to their own,
+  // which the Firestore rules enforce - so the scope has to be part of the query.
+  const scopedAgency =
+    userRole?.role === 'super_admin' ? undefined : userRole?.agency;
+
   useEffect(() => {
+    // Firestore rules need request.auth populated, and the scope depends on the
+    // role, so wait until the session has resolved before querying.
+    if (!user || !userRole) return;
     loadData();
-  }, []);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [user, userRole, scopedAgency]);
 
   const loadData = async () => {
     setLoading(true);
-    const result = await getAllIncidents();
+    const result = await getAllIncidents(50, scopedAgency);
     if (result.success && result.data) {
       setAllIncidents(result.data as Incident[]);
     }

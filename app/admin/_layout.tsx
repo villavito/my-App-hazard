@@ -12,7 +12,7 @@ import {
   View,
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
-import { AGENCY_COLORS } from "../../constants/agencies";
+import { AGENCIES, AGENCY_COLORS } from "../../constants/agencies";
 import { useAuth } from "../../contexts/AuthContext";
 import { signOutUser } from "../../services/authService";
 import { getIncidentsByAgency } from "../../services/firestoreService";
@@ -20,7 +20,7 @@ import { getIncidentsByAgency } from "../../services/firestoreService";
 const { width: SCREEN_WIDTH } = Dimensions.get("window");
 const SIDEBAR_WIDTH = SCREEN_WIDTH * 0.75;
 
-const INBOX_AGENCIES = ["PNP", "BFP", "Barangay"] as const;
+const INBOX_AGENCIES = AGENCIES;
 
 type NavItem = {
   icon: keyof typeof Ionicons.glyphMap;
@@ -41,10 +41,15 @@ export default function AdminLayout() {
   const [profileDropdownOpen, setProfileDropdownOpen] = useState(false);
   const [pendingCount, setPendingCount] = useState(0);
 
-  // Agency-scoped admins only see their own agency's pending count; unrestricted
-  // admins (e.g. super_admin) see the total across every agency inbox.
+  // Mirrors the scoping in admin/incidents.tsx: only super admins count every
+  // agency. An admin with no agency assigned counts nothing rather than
+  // everything, so the badge can't leak another agency's volume.
   const restrictedAgency = userRole?.agency;
-  const visibleAgencies = restrictedAgency ? [restrictedAgency] : INBOX_AGENCIES;
+  const visibleAgencies = userRole?.role === "super_admin"
+    ? INBOX_AGENCIES
+    : restrictedAgency
+      ? [restrictedAgency]
+      : [];
 
   useEffect(() => {
     // Querying before Firebase Auth has restored the session fails Firestore's

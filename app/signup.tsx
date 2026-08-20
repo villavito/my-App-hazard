@@ -29,6 +29,8 @@ export default function SignupScreen() {
   const [loading, setLoading] = useState(false);
   const router = useRouter();
 
+  const trimmedEmailLower = email.trim().toLowerCase();
+
   const styles = StyleSheet.create({
     container: {
       flex: 1,
@@ -119,40 +121,6 @@ export default function SignupScreen() {
       fontSize: 14,
       fontWeight: "700",
     },
-    dropdown: {
-      flexDirection: "row",
-      justifyContent: "space-between",
-      alignItems: "center",
-      backgroundColor: isDark ? "#1f1f1f" : "#f4f5f7",
-      borderRadius: 14,
-      padding: 16,
-      borderWidth: 1,
-      borderColor: isDark ? "#333" : "#e0e0e0",
-    },
-    dropdownText: {
-      color: isDark ? "#fff" : "#111",
-      fontSize: 16,
-    },
-    dropdownIcon: {
-      color: isDark ? "#888" : "#666",
-    },
-    dropdownOptions: {
-      marginTop: 8,
-      borderRadius: 14,
-      backgroundColor: isDark ? "#1f1f1f" : "#f4f5f7",
-      borderWidth: 1,
-      borderColor: isDark ? "#333" : "#e0e0e0",
-      overflow: "hidden",
-    },
-    dropdownOption: {
-      padding: 16,
-      borderBottomWidth: 1,
-      borderBottomColor: isDark ? "#333" : "#e0e0e0",
-    },
-    dropdownOptionText: {
-      color: isDark ? "#fff" : "#111",
-      fontSize: 16,
-    },
   });
 
   const handleSignup = async () => {
@@ -171,32 +139,25 @@ export default function SignupScreen() {
       return;
     }
 
-    setLoading(true);
-
-    const trimmedEmail = email.trim().toLowerCase();
     let assignedRole: "user" | "admin" | "super_admin" = "user";
 
-    if (trimmedEmail.endsWith("@super_admin.com")) {
+    if (trimmedEmailLower.endsWith("@super_admin.com")) {
       assignedRole = "super_admin";
-    } else if (trimmedEmail.endsWith("@admin.com")) {
+    } else if (trimmedEmailLower.endsWith("@admin.com")) {
       assignedRole = "admin";
     }
 
-    // Known agency-desk accounts are locked to their own agency's inbox.
-    const AGENCY_ADMIN_EMAILS: Record<string, "PNP" | "BFP" | "Barangay"> = {
-      "philippinenationalpolice@gmail.com": "PNP",
-      "bureauoffireprotection@admin.com": "BFP",
-      "barangay@admin.com": "Barangay",
-    };
-    const assignedAgency = AGENCY_ADMIN_EMAILS[trimmedEmail];
+    setLoading(true);
 
     try {
+      // Admin accounts created here have no agency - assign one afterward via
+      // the Firestore console (users/{uid}.agency, one of the values in
+      // constants/agencies.ts) so the account shows up in that agency's inbox.
       const result = await createUserWithRole(
-        trimmedEmail,
+        trimmedEmailLower,
         password,
         name.trim(),
         assignedRole,
-        assignedAgency,
       );
       if (result.success && result.user) {
         const selectedRole = result.user.role;

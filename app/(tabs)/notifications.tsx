@@ -1,7 +1,10 @@
 import { Ionicons } from '@expo/vector-icons';
-import { useEffect, useState } from 'react';
+import { useFocusEffect } from '@react-navigation/native';
+import { useRouter } from 'expo-router';
+import React, { useCallback, useState } from 'react';
 import {
   FlatList,
+  RefreshControl,
   StyleSheet,
   Text,
   TouchableOpacity,
@@ -11,11 +14,12 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useAuth } from '../../contexts/AuthContext';
 import {
+  deleteNotification,
   getUserNotifications,
   markAllNotificationsRead,
   markNotificationRead,
 } from '../../services/firestoreService';
-import React from 'react';
+import { showAlert } from '../../utils/crossPlatformAlert';
 
 function formatNotificationDate(createdAt?: { toDate: () => Date }) {
   if (!createdAt?.toDate) return 'Unknown date';
@@ -34,18 +38,34 @@ type AppNotification = {
 export default function NotificationsScreen() {
   const colorScheme = useColorScheme();
   const isDark = colorScheme === 'dark';
+  const router = useRouter();
   const { user } = useAuth();
   const [notifications, setNotifications] = useState<AppNotification[]>([]);
   const [filter, setFilter] = useState<'all' | 'unread'>('all');
+  const [refreshing, setRefreshing] = useState(false);
 
-  useEffect(() => {
+  const fetchNotifications = useCallback(async () => {
     if (!user) return;
-    getUserNotifications(user.uid).then((result) => {
-      if (result.success && result.data) {
-        setNotifications(result.data as AppNotification[]);
-      }
-    });
+    const result = await getUserNotifications(user.uid);
+    if (result.success && result.data) {
+      setNotifications(result.data as AppNotification[]);
+    }
   }, [user]);
+
+  // Re-fetch every time this tab regains focus, not just on first mount -
+  // otherwise a notification created while the user is elsewhere in the app
+  // (e.g. an admin comment) never shows up until a full app restart.
+  useFocusEffect(
+    useCallback(() => {
+      fetchNotifications();
+    }, [fetchNotifications]),
+  );
+
+  const onRefresh = async () => {
+    setRefreshing(true);
+    await fetchNotifications();
+    setRefreshing(false);
+  };
 
   const unreadCount = notifications.filter((n) => !n.read).length;
 
@@ -55,11 +75,34 @@ export default function NotificationsScreen() {
     markAllNotificationsRead(user.uid);
   };
 
+  const openNotification = (id: string) => {
+    router.push({ pathname: '/notification-detail', params: { id } });
+  };
+
   const markAsRead = (id: string) => {
     setNotifications((prev) =>
-      prev.map((n) => (n.id === id ? { ...n, read: true } : n))
+      prev.map((n) => (n.id === id ? { ...n, read: true } : n)),
     );
     markNotificationRead(id);
+  };
+
+  const removeNotification = (id: string) => {
+    setNotifications((prev) => prev.filter((n) => n.id !== id));
+    deleteNotification(id);
+  };
+
+  const handleLongPress = (item: AppNotification) => {
+    showAlert(item.title, 'What would you like to do with this notification?', [
+      ...(!item.read
+        ? [{ text: 'Mark as read', onPress: () => markAsRead(item.id) }]
+        : []),
+      {
+        text: 'Delete',
+        style: 'destructive' as const,
+        onPress: () => removeNotification(item.id),
+      },
+      { text: 'Cancel', style: 'cancel' as const },
+    ]);
   };
 
   const getStatusStyle = (status?: string) => {
@@ -247,7 +290,9 @@ export default function NotificationsScreen() {
     return (
       <TouchableOpacity
         style={styles.notificationItem}
-        onPress={() => markAsRead(item.id)}
+        onPress={() => openNotification(item.id)}
+        onLongPress={() => handleLongPress(item)}
+        activeOpacity={0.8}
       >
         {!item.read && <View style={styles.unreadDot} />}
         <View style={[styles.iconContainer, { backgroundColor: typeStyle.bg }]}>
@@ -255,9 +300,12 @@ export default function NotificationsScreen() {
         </View>
         <View style={styles.notificationContent}>
           <Text style={styles.notificationTitle}>{item.title}</Text>
-          <Text style={styles.notificationMessage}>{item.message}</Text>
+          <Text style={styles.notificationMessage} numberOfLines={2}>
+            {item.message}
+          </Text>
           <Text style={styles.notificationTime}>{formatNotificationDate(item.createdAt)}</Text>
         </View>
+        <Ionicons name="chevron-forward" size={18} color={isDark ? '#666' : '#ccc'} />
       </TouchableOpacity>
     );
   };
@@ -290,6 +338,13 @@ export default function NotificationsScreen() {
         contentContainerStyle={styles.listContent}
         showsVerticalScrollIndicator={false}
         ListHeaderComponent={listHeader}
+        refreshControl={
+          <RefreshControl
+            refreshing={refreshing}
+            onRefresh={onRefresh}
+            tintColor="#007AFF"
+          />
+        }
         ListEmptyComponent={
           <View style={styles.emptyState}>
             <Ionicons name="notifications-off-outline" size={56} color={isDark ? '#444' : '#ccc'} />

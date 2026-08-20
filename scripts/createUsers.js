@@ -49,6 +49,15 @@ async function ensureUser(u) {
       lastLogin: admin.firestore.FieldValue.serverTimestamp(),
     }, { merge: true });
 
+    // Mark this agency as having an active admin so the report-incident
+    // screen shows a submit button for it.
+    if (u.role === 'admin' && u.agency) {
+      await firestore.collection('agencies').doc(u.agency).set({
+        active: true,
+        updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+      }, { merge: true });
+    }
+
     console.log(`Ensured Firestore user doc for ${u.email} with role=${u.role}`);
   } catch (error) {
     console.error(`Error ensuring user ${u.email}:`, error);

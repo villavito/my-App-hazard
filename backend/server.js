@@ -70,8 +70,8 @@ const MAX_CODE_ATTEMPTS = 5;
 const AGENCY_EMAILS = {
   PNP: "philippinenationalpolice@gmail.com",
   BFP: "bureauoffireprotection@admin.com",
+  LDRRMC: "ldrrmc@admin.com",
   REDCROSS: "philippineredcross@admin.com",
-  MDRRMO: "mdrrmo@admin.com",
   Barangay: "barangay@admin.com",
 };
 

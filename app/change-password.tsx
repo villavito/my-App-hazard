@@ -252,7 +252,7 @@ export default function ChangePasswordScreen() {
               <View style={styles.stepContent}>
                 <Text style={styles.stepTitle}>Check your inbox</Text>
                 <Text style={styles.stepText}>
-                  We'll send a password reset link to your email. It may take a
+                  We&apos;ll send a password reset link to your email. It may take a
                   few minutes to arrive.
                 </Text>
               </View>

@@ -4,7 +4,7 @@
       "collectionGroup": "incidents",
       "queryScope": "COLLECTION",
       "fields": [
-        { "fieldPath": "agency", "order": "ASCENDING" },
+        { "fieldPath": "involvedAgency", "order": "ASCENDING" },
         { "fieldPath": "createdAt", "order": "DESCENDING" }
       ]
     },

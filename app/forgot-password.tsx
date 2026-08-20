@@ -199,7 +199,7 @@ export default function ForgotPasswordScreen() {
           <>
             <View style={styles.infoBox}>
               <Text style={styles.infoText}>
-                Enter your email address and we'll send you a 6-digit code to reset your password.
+                Enter your email address and we&apos;ll send you a 6-digit code to reset your password.
               </Text>
             </View>
 

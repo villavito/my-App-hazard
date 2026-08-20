@@ -15,12 +15,12 @@ import {
   View,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
-import { AGENCY_COLORS } from "../../constants/agencies";
+import { AGENCIES, AGENCY_COLORS, type Agency } from "../../constants/agencies";
 import { useAuth } from "../../contexts/AuthContext";
 import { getIncidentsByAgency } from "../../services/firestoreService";
 
-const INBOX_AGENCIES = ["PNP", "BFP", "Barangay"] as const;
-type InboxAgency = (typeof INBOX_AGENCIES)[number];
+const INBOX_AGENCIES = AGENCIES;
+type InboxAgency = Agency;
 
 type Incident = {
   id: string;
@@ -54,7 +54,39 @@ const thumbnailLoadingStyle = {
   backgroundColor: "#000",
 };
 
+// A report saved before video upload was restored (or one saved from a
+// device that never reached the backend) can have a file:// path that only
+// ever existed on the reporting phone. That's not a "this admin can't play
+// it" situation - useVideoPlayer() can throw synchronously trying to open a
+// path that doesn't exist here at all, which without a guard would crash
+// this list item's render and could blank the whole screen.
+function isRemoteVideoUrl(uri: string): boolean {
+  return uri.startsWith("http://") || uri.startsWith("https://");
+}
+
 function VideoThumbnail({
+  uri,
+  style,
+  overlayStyle,
+  onPress,
+}: {
+  uri: string;
+  style: object;
+  overlayStyle: object;
+  onPress: () => void;
+}) {
+  if (!isRemoteVideoUrl(uri)) {
+    return (
+      <View style={[style, thumbnailLoadingStyle]}>
+        <Ionicons name="alert-circle-outline" size={28} color="#fff" />
+      </View>
+    );
+  }
+
+  return <RemoteVideoThumbnail uri={uri} style={style} overlayStyle={overlayStyle} onPress={onPress} />;
+}
+
+function RemoteVideoThumbnail({
   uri,
   style,
   overlayStyle,
@@ -118,17 +150,21 @@ export default function AdminIncidentsScreen() {
   const params = useLocalSearchParams<{ status?: string }>();
   const { user, userRole } = useAuth();
 
-  // Agency-scoped admins (e.g. the PNP admin account) can only ever see their own
-  // agency's inbox. Admins with no assigned agency (e.g. super_admin) can see both.
+  // Only super admins see every agency's inbox. An agency admin sees strictly
+  // their own. An admin with no agency assigned sees nothing rather than
+  // everything - failing open here is what let one agency read another's
+  // reports whenever the user doc was missing its `agency` field.
   const restrictedAgency = userRole?.agency;
-  const visibleAgencies = useMemo<readonly InboxAgency[]>(
-    () => (restrictedAgency ? [restrictedAgency] : INBOX_AGENCIES),
-    [restrictedAgency],
-  );
+  const isSuperAdmin = userRole?.role === "super_admin";
+  const visibleAgencies = useMemo<readonly InboxAgency[]>(() => {
+    if (isSuperAdmin) return INBOX_AGENCIES;
+    return restrictedAgency ? [restrictedAgency] : [];
+  }, [isSuperAdmin, restrictedAgency]);
 
   const [incidents, setIncidents] = useState<Incident[]>([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
+  const [loadError, setLoadError] = useState<string | null>(null);
   const [statusFilter, setStatusFilter] = useState<string>(
     params.status || "all",
   );
@@ -149,6 +185,25 @@ export default function AdminIncidentsScreen() {
       const results = await Promise.all(
         visibleAgencies.map((agency) => getIncidentsByAgency(agency)),
       );
+
+      results.forEach((result, i) => {
+        const agency = visibleAgencies[i];
+        if (result.success) {
+          console.log(
+            `[admin/incidents] ${agency}: ${result.data?.length ?? 0} doc(s)`,
+          );
+        } else {
+          console.warn(`[admin/incidents] ${agency} query failed:`, result.error);
+        }
+      });
+
+      const failed = results.filter((result) => !result.success);
+      setLoadError(
+        failed.length > 0
+          ? `Couldn't load ${failed.length} of ${results.length} agency inbox(es). Pull to refresh to retry.`
+          : null,
+      );
+
       const merged = results
         .filter((result) => result.success && result.data)
         .flatMap((result) => result.data as Incident[])
@@ -201,6 +256,20 @@ export default function AdminIncidentsScreen() {
       fontWeight: "bold",
       color: isDark ? "#fff" : "#1a1a2e",
       flex: 1,
+    },
+    errorBanner: {
+      flexDirection: "row",
+      alignItems: "center",
+      gap: 6,
+      backgroundColor: isDark ? "#3a1a1a" : "#fdecea",
+      borderRadius: 8,
+      padding: 8,
+      marginTop: 10,
+    },
+    errorBannerText: {
+      flex: 1,
+      fontSize: 12,
+      color: "#FF3B30",
     },
     // Status Filter
     statusFilterRow: {
@@ -414,6 +483,13 @@ export default function AdminIncidentsScreen() {
           <Text style={styles.headerTitle}>Notifications</Text>
         </View>
 
+        {loadError && (
+          <View style={styles.errorBanner}>
+            <Ionicons name="warning-outline" size={16} color="#FF3B30" />
+            <Text style={styles.errorBannerText}>{loadError}</Text>
+          </View>
+        )}
+
         {/* Status Filter */}
         <View style={styles.statusFilterRow}>
           {STATUS_FILTERS.map((filter) => (
@@ -458,11 +534,19 @@ export default function AdminIncidentsScreen() {
           ListEmptyComponent={
             <View style={styles.emptyContainer}>
               <Ionicons
-                name="document-text-outline"
+                name={
+                  visibleAgencies.length === 0
+                    ? "alert-circle-outline"
+                    : "document-text-outline"
+                }
                 size={48}
                 color={isDark ? "#555" : "#ccc"}
               />
-              <Text style={styles.emptyText}>No reports yet</Text>
+              <Text style={styles.emptyText}>
+                {visibleAgencies.length === 0
+                  ? "This admin account has no agency assigned, so it has no inbox to show."
+                  : "No reports yet"}
+              </Text>
             </View>
           }
         />

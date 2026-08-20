@@ -1,8 +1,11 @@
 import { Ionicons } from "@expo/vector-icons";
+import * as Location from "expo-location";
 import { useRouter } from "expo-router";
 import React, { useEffect, useState } from "react";
 import {
   ActivityIndicator,
+  Linking,
+  Platform,
   RefreshControl,
   ScrollView,
   StyleSheet,
@@ -14,6 +17,38 @@ import {
 import { SafeAreaView } from "react-native-safe-area-context";
 import { useAuth } from "../../contexts/AuthContext";
 import { getUserIncidents } from "../../services/firestoreService";
+import { showAlert } from "../../utils/crossPlatformAlert";
+
+// WMO weather codes (https://open-meteo.com/en/docs) collapsed into a small
+// set of icon/label buckets - the API returns a granular code but the widget
+// only has room for a short description.
+const WEATHER_CODES: Record<number, { label: string; icon: keyof typeof Ionicons.glyphMap }> = {
+  0: { label: "Clear sky", icon: "sunny-outline" },
+  1: { label: "Mostly clear", icon: "partly-sunny-outline" },
+  2: { label: "Partly cloudy", icon: "partly-sunny-outline" },
+  3: { label: "Overcast", icon: "cloud-outline" },
+  45: { label: "Foggy", icon: "cloud-outline" },
+  48: { label: "Foggy", icon: "cloud-outline" },
+  51: { label: "Light drizzle", icon: "rainy-outline" },
+  53: { label: "Drizzle", icon: "rainy-outline" },
+  55: { label: "Heavy drizzle", icon: "rainy-outline" },
+  61: { label: "Light rain", icon: "rainy-outline" },
+  63: { label: "Rain", icon: "rainy-outline" },
+  65: { label: "Heavy rain", icon: "rainy-outline" },
+  71: { label: "Light snow", icon: "snow-outline" },
+  73: { label: "Snow", icon: "snow-outline" },
+  75: { label: "Heavy snow", icon: "snow-outline" },
+  80: { label: "Rain showers", icon: "rainy-outline" },
+  81: { label: "Rain showers", icon: "rainy-outline" },
+  82: { label: "Violent rain showers", icon: "rainy-outline" },
+  95: { label: "Thunderstorm", icon: "thunderstorm-outline" },
+  96: { label: "Thunderstorm", icon: "thunderstorm-outline" },
+  99: { label: "Thunderstorm", icon: "thunderstorm-outline" },
+};
+
+function describeWeatherCode(code: number) {
+  return WEATHER_CODES[code] ?? { label: "Unknown", icon: "help-outline" as const };
+}
 
 export default function HomeScreen() {
   const colorScheme = useColorScheme();
@@ -28,6 +63,62 @@ export default function HomeScreen() {
   });
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
+  const [weather, setWeather] = useState<{ temperature: number; code: number } | null>(null);
+  const [weatherError, setWeatherError] = useState<string | null>(null);
+  const [weatherLoading, setWeatherLoading] = useState(true);
+  const [weatherPermissionBlocked, setWeatherPermissionBlocked] = useState(false);
+
+  const fetchWeather = async () => {
+    setWeatherLoading(true);
+    setWeatherError(null);
+    setWeatherPermissionBlocked(false);
+    try {
+      const { status, canAskAgain } =
+        await Location.requestForegroundPermissionsAsync();
+      if (status !== "granted") {
+        // On web, expo-location's polyfill only re-prompts when the browser
+        // permission is still "prompt" (never asked) - once the browser
+        // itself reports "denied", canAskAgain still comes back true here
+        // but tapping to retry will just get "denied" again silently, since
+        // JS can't reopen a browser permission prompt. There's also no OS
+        // Settings app to deep-link to on web, unlike native.
+        const blocked =
+          Platform.OS === "web" ? status === "denied" : !canAskAgain;
+        setWeatherError(
+          blocked
+            ? Platform.OS === "web"
+              ? "Location blocked - tap for instructions"
+              : "Location permission denied - tap to open Settings"
+            : "Location permission needed for weather",
+        );
+        setWeatherPermissionBlocked(blocked);
+        return;
+      }
+
+      const position = await Promise.race([
+        Location.getCurrentPositionAsync({ accuracy: Location.Accuracy.Low }),
+        new Promise<never>((_, reject) =>
+          setTimeout(() => reject(new Error("Timed out waiting for a GPS fix")), 10000),
+        ),
+      ]);
+
+      const response = await fetch(
+        `https://api.open-meteo.com/v1/forecast?latitude=${position.coords.latitude}&longitude=${position.coords.longitude}&current_weather=true`,
+      );
+      if (!response.ok) throw new Error(`Weather request failed (${response.status})`);
+      const json = await response.json();
+
+      setWeather({
+        temperature: Math.round(json.current_weather.temperature),
+        code: json.current_weather.weathercode,
+      });
+    } catch (error) {
+      console.warn("Error fetching weather:", error);
+      setWeatherError("Couldn't load weather");
+    } finally {
+      setWeatherLoading(false);
+    }
+  };
 
   const fetchData = async () => {
     if (!user) return;
@@ -50,9 +141,13 @@ export default function HomeScreen() {
     fetchData();
   }, [user]);
 
+  useEffect(() => {
+    fetchWeather();
+  }, []);
+
   const onRefresh = async () => {
     setRefreshing(true);
-    await fetchData();
+    await Promise.all([fetchData(), fetchWeather()]);
     setRefreshing(false);
   };
 
@@ -135,6 +230,60 @@ export default function HomeScreen() {
       color: isDark ? "#888" : "#666",
       marginTop: 4,
       textAlign: "center",
+    },
+    widgetRow: {
+      flexDirection: "row",
+      paddingHorizontal: 20,
+      marginTop: 20,
+      gap: 10,
+    },
+    widgetCard: {
+      flex: 1,
+      backgroundColor: isDark ? "#1a1a1a" : "#fff",
+      borderRadius: 14,
+      padding: 14,
+      elevation: 2,
+      shadowColor: "#000",
+      shadowOffset: { width: 0, height: 1 },
+      shadowOpacity: 0.1,
+      shadowRadius: 3,
+    },
+    dateCardMonth: {
+      fontSize: 12,
+      fontWeight: "700",
+      color: "#007AFF",
+      letterSpacing: 1,
+    },
+    dateCardDay: {
+      fontSize: 32,
+      fontWeight: "800",
+      color: isDark ? "#fff" : "#000",
+      marginTop: 2,
+    },
+    dateCardWeekday: {
+      fontSize: 13,
+      color: isDark ? "#888" : "#666",
+      marginTop: 2,
+    },
+    weatherCardTop: {
+      flexDirection: "row",
+      alignItems: "center",
+      justifyContent: "space-between",
+    },
+    weatherTemp: {
+      fontSize: 28,
+      fontWeight: "800",
+      color: isDark ? "#fff" : "#000",
+    },
+    weatherLabel: {
+      fontSize: 13,
+      color: isDark ? "#888" : "#666",
+      marginTop: 6,
+    },
+    weatherErrorText: {
+      fontSize: 12,
+      color: isDark ? "#888" : "#666",
+      marginTop: 6,
     },
     section: {
       paddingHorizontal: 20,
@@ -231,6 +380,65 @@ export default function HomeScreen() {
           <View style={styles.sectionHeader}>
             <Text style={styles.sectionTitle}>DASHBOARD</Text>
           </View>
+        </View>
+
+        {/* Date & Weather */}
+        <View style={styles.widgetRow}>
+          <View style={styles.widgetCard}>
+            <Text style={styles.dateCardMonth}>
+              {new Date().toLocaleDateString("en-US", { month: "long" }).toUpperCase()}
+            </Text>
+            <Text style={styles.dateCardDay}>{new Date().getDate()}</Text>
+            <Text style={styles.dateCardWeekday}>
+              {new Date().toLocaleDateString("en-US", { weekday: "long" })}
+            </Text>
+          </View>
+
+          <TouchableOpacity
+            style={styles.widgetCard}
+            activeOpacity={weatherLoading || weather ? 1 : 0.6}
+            disabled={weatherLoading || !!weather}
+            onPress={() => {
+              if (!weatherPermissionBlocked) {
+                fetchWeather();
+                return;
+              }
+              if (Platform.OS === "web") {
+                showAlert(
+                  "Location Blocked",
+                  "Your browser has blocked location for this site. Click the lock/site-info icon next to the address bar, set Location to Allow, then reload the page.",
+                );
+                return;
+              }
+              Linking.openSettings();
+            }}
+          >
+            {weatherLoading ? (
+              <ActivityIndicator size="small" color="#007AFF" />
+            ) : weather ? (
+              <>
+                <View style={styles.weatherCardTop}>
+                  <Text style={styles.weatherTemp}>{weather.temperature}°C</Text>
+                  <Ionicons
+                    name={describeWeatherCode(weather.code).icon}
+                    size={28}
+                    color="#007AFF"
+                  />
+                </View>
+                <Text style={styles.weatherLabel}>
+                  {describeWeatherCode(weather.code).label}
+                </Text>
+              </>
+            ) : (
+              <>
+                <Ionicons name="cloud-offline-outline" size={22} color="#888" />
+                <Text style={styles.weatherErrorText}>{weatherError}</Text>
+              </>
+            )}
+          </TouchableOpacity>
+        </View>
+
+        <View style={[styles.section, { marginTop: 20 }]}>
           <View style={styles.actionGrid}>
             <TouchableOpacity
               style={styles.actionCard}

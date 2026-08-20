@@ -13,7 +13,8 @@ import {
 import { SafeAreaView } from "react-native-safe-area-context";
 import { AGENCY_COLORS } from "../constants/agencies";
 import { useAuth } from "../contexts/AuthContext";
-import { getUserIncidents } from "../services/firestoreService";
+import { deleteIncidentReport, getUserIncidents } from "../services/firestoreService";
+import { showAlert } from "../utils/crossPlatformAlert";
 
 type MyIncident = {
   id: string;
@@ -57,6 +58,26 @@ export default function MyReportsScreen() {
       setLoading(false);
     });
   }, [user]);
+
+  const removeReport = (id: string) => {
+    setReports((prev) => prev.filter((r) => r.id !== id));
+    deleteIncidentReport(id);
+  };
+
+  const handleLongPress = (item: MyIncident) => {
+    showAlert(
+      "Delete Report",
+      "Are you sure you want to delete this incident report? This cannot be undone.",
+      [
+        { text: "Cancel", style: "cancel" },
+        {
+          text: "Delete",
+          style: "destructive",
+          onPress: () => removeReport(item.id),
+        },
+      ],
+    );
+  };
 
   const styles = StyleSheet.create({
     container: {
@@ -154,7 +175,11 @@ export default function MyReportsScreen() {
   });
 
   const renderItem = ({ item }: { item: MyIncident }) => (
-    <View style={styles.card}>
+    <TouchableOpacity
+      style={styles.card}
+      activeOpacity={0.8}
+      onLongPress={() => handleLongPress(item)}
+    >
       <View style={styles.cardHeader}>
         <Text style={styles.cardTitle}>
           {item.situation || item.description || "Incident Report"}
@@ -178,7 +203,7 @@ export default function MyReportsScreen() {
       <Text style={styles.meta}>Injury: {item.injuryLevel || "Not specified"}</Text>
       <Text style={styles.meta}>Location: {item.location || "Not provided"}</Text>
       <Text style={styles.meta}>Submitted: {formatReportDate(item.createdAt)}</Text>
-    </View>
+    </TouchableOpacity>
   );
 
   return (
