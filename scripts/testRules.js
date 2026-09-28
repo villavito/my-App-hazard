@@ -77,9 +77,19 @@ async function run() {
       displayName: "Agencyless Admin",
       role: "admin",
     });
+    // Signed up through the app as ldrrmc01@admin.com before agencies were
+    // read from the email, so it has none yet.
+    for (const uid of ["ldrrmc-admin", "ldrrmc-admin-2"]) {
+      await setDoc(doc(db, "users", uid), {
+        uid,
+        email: "ldrrmc01@admin.com",
+        displayName: "LDRRMC Admin",
+        role: "admin",
+      });
+    }
     await setDoc(doc(db, "users", "super"), {
       uid: "super",
-      email: "super@super_admin.com",
+      email: "super@superadmin.com",
       displayName: "Super Admin",
       role: "super_admin",
     });
@@ -95,7 +105,7 @@ async function run() {
       userId: "reporter",
       userEmail: "reporter@example.com",
       videoUrl: "file:///pnp.mp4",
-      injuryLevel: "No Injury",
+      category: "Theft / Robbery",
       involvedAgency: "PNP",
       location: "Zamboanga",
       status: "pending",
@@ -106,7 +116,7 @@ async function run() {
       userId: "reporter",
       userEmail: "reporter@example.com",
       videoUrl: "file:///bfp.mp4",
-      injuryLevel: "Minor (First Aid)",
+      category: "Residential Fire",
       involvedAgency: "BFP",
       location: "Ayala",
       status: "pending",
@@ -207,6 +217,87 @@ async function run() {
   await check(
     "Anonymous CANNOT read any incident",
     assertFails(getDoc(doc(anon, "incidents", "pnp-incident"))),
+  );
+
+  console.log("\nSelf-service role escalation is blocked");
+  await check(
+    "Reporter CANNOT promote themselves to super_admin",
+    assertFails(
+      updateDoc(doc(reporter, "users", "reporter"), { role: "super_admin" }),
+    ),
+  );
+  await check(
+    "Reporter CANNOT assign themselves an agency",
+    assertFails(
+      updateDoc(doc(reporter, "users", "reporter"), { agency: "PNP" }),
+    ),
+  );
+  await check(
+    "Reporter CAN still update their own displayName",
+    assertSucceeds(
+      updateDoc(doc(reporter, "users", "reporter"), { displayName: "New Name" }),
+    ),
+  );
+  await check(
+    "Agency admin CANNOT promote themselves to super_admin",
+    assertFails(
+      updateDoc(doc(pnp, "users", "pnp-admin"), { role: "super_admin" }),
+    ),
+  );
+  await check(
+    "Reporter CANNOT delete their own user doc (to re-create it as admin)",
+    assertFails(deleteDoc(doc(reporter, "users", "reporter"))),
+  );
+  await check(
+    "Super admin CAN change another user's role",
+    assertSucceeds(
+      updateDoc(doc(superAdmin, "users", "reporter"), { role: "admin" }),
+    ),
+  );
+
+  console.log("\nAdmin agency filled in from sign-in email");
+  const ldrrmc = testEnv
+    .authenticatedContext("ldrrmc-admin", { email: "LDRRMC01@admin.com" })
+    .firestore();
+  const ldrrmc2 = testEnv
+    .authenticatedContext("ldrrmc-admin-2", { email: "ldrrmc01@admin.com" })
+    .firestore();
+  const noAgencyWithEmail = testEnv
+    .authenticatedContext("noagency-admin", { email: "admin@admin.com" })
+    .firestore();
+  const bfpWithEmail = testEnv
+    .authenticatedContext("bfp-admin", { email: "bfp@admin.com" })
+    .firestore();
+  await check(
+    "Agencyless admin CANNOT take an agency its email doesn't name",
+    assertFails(updateDoc(doc(ldrrmc2, "users", "ldrrmc-admin-2"), { agency: "BFP" })),
+  );
+  await check(
+    "Agencyless admin CANNOT set its agency and change role together",
+    assertFails(
+      updateDoc(doc(ldrrmc2, "users", "ldrrmc-admin-2"), {
+        agency: "LDRRMC",
+        role: "super_admin",
+      }),
+    ),
+  );
+  await check(
+    "Admin whose email names no agency CANNOT pick one",
+    assertFails(
+      updateDoc(doc(noAgencyWithEmail, "users", "noagency-admin"), { agency: "PNP" }),
+    ),
+  );
+  await check(
+    "Agencyless admin CAN set the agency its email names",
+    assertSucceeds(updateDoc(doc(ldrrmc, "users", "ldrrmc-admin"), { agency: "LDRRMC" })),
+  );
+  await check(
+    "...and CANNOT change it again afterwards",
+    assertFails(updateDoc(doc(ldrrmc, "users", "ldrrmc-admin"), { agency: "BFP" })),
+  );
+  await check(
+    "Admin with an agency CANNOT switch to another",
+    assertFails(updateDoc(doc(bfpWithEmail, "users", "bfp-admin"), { agency: "PNP" })),
   );
 
   await testEnv.cleanup();

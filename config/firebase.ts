@@ -1,7 +1,7 @@
 import AsyncStorage from "@react-native-async-storage/async-storage";
-import { Platform } from "react-native";
 import { getApp, getApps, initializeApp } from "firebase/app";
 import { getAuth, initializeAuth, type Auth } from "firebase/auth";
+import { Platform } from "react-native";
 // getReactNativePersistence only exists in @firebase/auth's "react-native" build;
 // the "firebase" wrapper package's own auth export map has no react-native
 // condition, so it must be imported directly from @firebase/auth to resolve.

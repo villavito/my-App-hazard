@@ -27,12 +27,72 @@ service cloud.firestore {
       return callerExists() ? callerData().get('agency', null) : null;
     }
 
+    // Which @admin.com addresses belong to which agency - the part before "@"
+    // starts with the agency code or full name. Keep in sync with
+    // AGENCY_EMAIL_PREFIXES in constants/agencies.ts.
+    function agencyEmailPatterns() {
+      return {
+        'PNP': '(pnp|philippinenationalpolice)',
+        'BFP': '(bfp|bureauoffireprotection)',
+        'LDRRMC': '(ldrrmc|localdisasterriskreductionmanagementcouncil)',
+        'Barangay': '(barangay)',
+        'REDCROSS': '(redcross|philippineredcross)'
+      };
+    }
+
+    function signedInEmailNamesAgency(agency) {
+      return agency is string &&
+        agency in agencyEmailPatterns() &&
+        request.auth.token.get('email', '').lower()
+          .matches(agencyEmailPatterns()[agency] + '.*@admin[.]com');
+    }
+
     match /users/{userId} {
       allow read: if request.auth != null && (request.auth.uid == userId || isAdmin());
-      allow write: if request.auth != null && request.auth.uid == userId;
+      // The role (and agency) chosen at creation must match what the signup
+      // screen would assign for the signed-in email - otherwise any new Auth
+      // account could create its own doc as super_admin and sidestep the
+      // role lock on update below entirely.
       allow create: if request.auth != null &&
         request.auth.uid == userId &&
-        request.resource.data.keys().hasAll(['uid', 'email', 'displayName', 'role', 'createdAt', 'lastLogin']);
+        request.resource.data.keys().hasAll(['uid', 'email', 'displayName', 'role', 'createdAt', 'lastLogin']) &&
+        (
+          (request.resource.data.role == 'user' &&
+            !('agency' in request.resource.data)) ||
+          (request.resource.data.role == 'admin' &&
+            request.auth.token.get('email', '').lower().matches('.*@admin[.]com') &&
+            (!('agency' in request.resource.data) ||
+              signedInEmailNamesAgency(request.resource.data.agency))) ||
+          (request.resource.data.role == 'super_admin' &&
+            request.auth.token.get('email', '').lower().matches('.*@superadmin[.]com') &&
+            !('agency' in request.resource.data))
+        );
+
+      // A user may update their own doc (display name, lastLogin, etc.) but not
+      // their own role/agency - otherwise any signed-in "user" could grant
+      // itself admin or super_admin access by writing straight to Firestore,
+      // bypassing the signup screen's role assignment entirely. Only an
+      // existing super admin can change someone's role/agency after creation.
+      //
+      // One exception: an admin with no agency yet may set it once, to the
+      // agency its own sign-in email names (ldrrmc01@admin.com -> LDRRMC), and
+      // change nothing else in that write. The email comes from the auth
+      // token, not the document, so it can't be forged.
+      allow update: if request.auth != null && (
+        isSuperAdmin() ||
+        (request.auth.uid == userId &&
+          request.resource.data.role == resource.data.role &&
+          request.resource.data.get('agency', null) == resource.data.get('agency', null)) ||
+        (request.auth.uid == userId &&
+          resource.data.role == 'admin' &&
+          resource.data.get('agency', null) == null &&
+          request.resource.data.diff(resource.data).affectedKeys().hasOnly(['agency']) &&
+          signedInEmailNamesAgency(request.resource.data.agency))
+      );
+
+      // Not self-deletable: deleting and re-creating the doc would otherwise
+      // sidestep the role/agency lock on update above.
+      allow delete: if isSuperAdmin();
     }
 
     match /incidents/{incidentId} {
@@ -55,7 +115,7 @@ service cloud.firestore {
       );
       allow create: if request.auth != null &&
         request.auth.uid == request.resource.data.userId &&
-        request.resource.data.keys().hasAll(['id', 'userId', 'userEmail', 'videoUrl', 'injuryLevel', 'location', 'status', 'createdAt']) &&
+        request.resource.data.keys().hasAll(['id', 'userId', 'userEmail', 'videoUrl', 'category', 'location', 'status', 'createdAt']) &&
         request.resource.data.involvedAgency in ['PNP', 'BFP', 'LDRRMC', 'Barangay', 'REDCROSS'];
     }
 

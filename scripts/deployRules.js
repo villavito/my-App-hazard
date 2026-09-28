@@ -1,15 +1,18 @@
 /**
  * One-command deploy of firestore.rules (and indexes).
  *
- * Run this in your own terminal - not through an automated agent - because the
- * login step opens a browser and waits for you. That interactive step is the
- * only reason this can't be fully automated.
- *
  *   npm run deploy:rules
  *
- * It checks whether the Firebase CLI can actually reach your project, runs
- * `login --reauth` if it can't (an expired stored token looks like a valid
- * login but 401s on every request), then deploys.
+ * Fully automatic when a service account key is available - either
+ * GOOGLE_APPLICATION_CREDENTIALS is set, or the key is saved at
+ * backend/config/serviceAccountKey.json (gitignored). The Firebase CLI signs in
+ * with that key, so no browser and no expiring login token are involved.
+ *
+ * Without a key it falls back to your personal CLI login: it checks whether
+ * the CLI can actually reach your project, runs `login --reauth` if it can't
+ * (an expired stored token looks like a valid login but 401s on every
+ * request), then deploys. That fallback opens a browser, so run it in your own
+ * terminal.
  */
 
 const { spawnSync } = require("child_process");
@@ -37,6 +40,21 @@ function projectId() {
   }
 }
 
+const DEFAULT_KEY_PATH = path.join(
+  __dirname,
+  "..",
+  "backend",
+  "config",
+  "serviceAccountKey.json",
+);
+
+// Returns the service account key the CLI should sign in with, if any.
+function serviceAccountKeyPath() {
+  const fromEnv = process.env.GOOGLE_APPLICATION_CREDENTIALS;
+  if (fromEnv && fs.existsSync(fromEnv)) return fromEnv;
+  return fs.existsSync(DEFAULT_KEY_PATH) ? DEFAULT_KEY_PATH : null;
+}
+
 function isAuthenticated() {
   const result = firebase(["projects:list"], { quiet: true });
   return result.status === 0;
@@ -53,7 +71,14 @@ function run() {
 
   console.log(`Project: ${project}\n`);
 
-  if (isAuthenticated()) {
+  const keyPath = serviceAccountKeyPath();
+  if (keyPath) {
+    // Inherited by the npx child processes. Skips the projects:list check too:
+    // a service account usually can't list projects even though it can deploy
+    // rules to its own one.
+    process.env.GOOGLE_APPLICATION_CREDENTIALS = keyPath;
+    console.log(`Signing in with service account key: ${keyPath}\n`);
+  } else if (isAuthenticated()) {
     console.log("Firebase CLI is authenticated.\n");
   } else {
     console.log(
@@ -69,6 +94,9 @@ function run() {
       console.error(
         "\nLogin failed or was cancelled. If the browser flow won't work on this\n" +
           "machine, try:  npx firebase-tools login --no-localhost\n\n" +
+          "To skip logging in for good, save a service account key (Firebase\n" +
+          "Console -> Project settings -> Service accounts -> Generate new\n" +
+          "private key) as backend/config/serviceAccountKey.json.\n\n" +
           "You can also skip the CLI entirely: paste firestore.rules into the\n" +
           "Firebase Console -> Firestore Database -> Rules tab and click Publish.",
       );
