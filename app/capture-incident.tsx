@@ -22,6 +22,7 @@ import { API_BASE_URL_CANDIDATES } from "../config/api";
 import { db } from "../config/firebase";
 import { AGENCIES, type Agency } from "../constants/agencies";
 import { INCIDENT_CATEGORIES } from "../constants/incidentCategories";
+import { INJURY_LEVELS } from "../constants/injuryLevels";
 import { useAuth } from "../contexts/AuthContext";
 import { subscribeToActiveAgencies } from "../services/firestoreService";
 import { showAlert } from "../utils/crossPlatformAlert";
@@ -255,6 +256,7 @@ export default function CaptureIncidentScreen() {
   const [activeAgencies, setActiveAgencies] = useState<Agency[]>([]);
   const [selectedAgency, setSelectedAgency] = useState<Agency | "">("");
   const [category, setCategory] = useState("");
+  const [injuryLevel, setInjuryLevel] = useState("");
 
   useEffect(() => {
     // Firebase Auth restores the session asynchronously on app start, so
@@ -595,7 +597,7 @@ export default function CaptureIncidentScreen() {
   };
 
   const canSubmit = Boolean(
-    video && selectedAgency && category,
+    video && injuryLevel && selectedAgency && category,
   );
   const isUploading = submittingAgency !== null;
 
@@ -751,6 +753,7 @@ export default function CaptureIncidentScreen() {
     if (!canSubmit) {
       const missingFields = [
         !video ? "video" : null,
+        !injuryLevel ? "injury level" : null,
         !selectedAgency ? "agency" : null,
         !category ? "incident" : null,
       ].filter(Boolean);
@@ -791,6 +794,7 @@ export default function CaptureIncidentScreen() {
         videoUrl,
         involvedAgency: agency,
         category,
+        injuryLevel,
         location: location.trim(),
         coordinates,
         status: "pending",
@@ -934,6 +938,15 @@ export default function CaptureIncidentScreen() {
             </View>
           ) : null}
         </View>
+
+        <DropdownField
+          label="Injury Level"
+          value={injuryLevel}
+          placeholder="Select injury level..."
+          options={[...INJURY_LEVELS]}
+          onSelect={setInjuryLevel}
+          isDark={isDark}
+        />
 
         {/* Every agency is listed so citizens can see who exists; ones with no
             admin watching the inbox yet are greyed out and can't be picked. */}

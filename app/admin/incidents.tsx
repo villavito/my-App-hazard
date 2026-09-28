@@ -554,7 +554,6 @@ export default function AdminIncidentsScreen() {
       <Text style={styles.metaText}>
         Reporter: {item.userEmail || "Unknown"}
       </Text>
-      {/* Only reports made before Incident replaced Injury Level have one. */}
       {item.injuryLevel ? (
         <Text style={styles.metaText}>Injury: {item.injuryLevel}</Text>
       ) : null}

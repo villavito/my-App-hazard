@@ -154,8 +154,12 @@ export default function IncidentDetailScreen() {
   };
 
   const getInjuryBadge = (level?: string) => {
-    switch (level?.toLowerCase()) {
+    // Match on the first word so "Minor (First Aid)" etc. from INJURY_LEVELS
+    // hit the same colors as older plain values like "minor".
+    switch (level?.toLowerCase().split(/[\s(]/)[0]) {
+      case "fatality":
       case "critical":
+      case "serious":
       case "severe":
         return { bg: "#FF3B3020", text: "#FF3B30", label: level };
       case "moderate":
@@ -654,7 +658,6 @@ export default function IncidentDetailScreen() {
               </View>
             </View>
 
-            {/* Only reports made before Incident replaced Injury Level have one. */}
             {incident.injuryLevel ? (
               <View style={styles.infoRow}>
                 <Ionicons

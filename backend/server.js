@@ -128,6 +128,10 @@ app.post("/api/notify-agency", async (req, res) => {
                 <td style="padding: 10px; border-bottom: 1px solid #eee; color: #333;">${incidentData.category || "Not specified"}</td>
               </tr>
               <tr>
+                <td style="padding: 10px; border-bottom: 1px solid #eee; font-weight: bold; color: #555;">Injury Level:</td>
+                <td style="padding: 10px; border-bottom: 1px solid #eee; color: #333;">${incidentData.injuryLevel || "Not specified"}</td>
+              </tr>
+              <tr>
                 <td style="padding: 10px; border-bottom: 1px solid #eee; font-weight: bold; color: #555;">Location:</td>
                 <td style="padding: 10px; border-bottom: 1px solid #eee; color: #333;">${incidentData.location || "Not provided"}</td>
               </tr>
