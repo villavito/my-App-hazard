@@ -1,6 +1,5 @@
 import { Ionicons } from '@expo/vector-icons';
-import { useFocusEffect } from '@react-navigation/native';
-import { useRouter } from 'expo-router';
+import { useFocusEffect, useRouter } from 'expo-router';
 import React, { useCallback, useState } from 'react';
 import {
   FlatList,
@@ -198,11 +197,7 @@ export default function NotificationsScreen() {
       padding: 16,
       borderRadius: 14,
       marginBottom: 10,
-      elevation: 1,
-      shadowColor: '#000',
-      shadowOffset: { width: 0, height: 1 },
-      shadowOpacity: 0.08,
-      shadowRadius: 2,
+      boxShadow: '0px 1px 2px rgba(0, 0, 0, 0.08)',
     },
     unreadDot: {
       width: 8,

@@ -9,7 +9,6 @@ import {
   TouchableOpacity,
   View,
 } from "react-native";
-// import { signInWithEmailAndPassword, auth } from '../../config/firebase';
 
 export default function LoginScreen() {
   const [email, setEmail] = useState("");
@@ -27,11 +26,9 @@ export default function LoginScreen() {
     setError("");
 
     try {
-      // Basic validation for demo purposes - remove when Firebase is installed
       if (email === "demo@example.com" && password === "password") {
         console.log("Login successful");
 
-        // Navigate to tabs/home after successful login
         router.push("/");
       } else {
         setError("Invalid email or password. Use demo@example.com / password");
@@ -113,11 +110,7 @@ const styles = StyleSheet.create({
     padding: 25,
     borderRadius: 15,
     margin: 20,
-    shadowColor: "#000",
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.3,
-    shadowRadius: 10,
-    elevation: 5,
+    boxShadow: "0px 4px 10px rgba(0, 0, 0, 0.3)",
   },
   title: {
     fontSize: 28,

@@ -1,13 +1,14 @@
 import { Ionicons } from "@expo/vector-icons";
 import { Image } from "expo-image";
 import { useLocalSearchParams, useRouter } from "expo-router";
-import { useVideoPlayer, type VideoThumbnail as VideoThumbnailImage } from "expo-video";
+import { createVideoPlayer, type VideoThumbnail as VideoThumbnailImage } from "expo-video";
 import * as React from "react";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import {
   ActivityIndicator,
   FlatList,
   RefreshControl,
+  ScrollView,
   StyleSheet,
   Text,
   TouchableOpacity,
@@ -16,8 +17,13 @@ import {
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { AGENCIES, AGENCY_COLORS, type Agency } from "../../constants/agencies";
+import { INCIDENT_CATEGORIES } from "../../constants/incidentCategories";
 import { useAuth } from "../../contexts/AuthContext";
-import { getIncidentsByAgency } from "../../services/firestoreService";
+import {
+  deleteIncidentReport,
+  getIncidentsByAgency,
+} from "../../services/firestoreService";
+import { showAlert } from "../../utils/crossPlatformAlert";
 
 const INBOX_AGENCIES = AGENCIES;
 type InboxAgency = Agency;
@@ -28,12 +34,15 @@ type Incident = {
   situation?: string;
   description?: string;
   injuryLevel?: string;
+  category?: string;
   location?: string;
   status?: string;
   videoUrl?: string;
   involvedAgency?: string;
   createdAt?: { toDate: () => Date };
 };
+
+const ALL_CATEGORIES = "all";
 
 const STATUS_FILTERS = ["all", "pending", "in_progress", "resolved"] as const;
 
@@ -57,7 +66,7 @@ const thumbnailLoadingStyle = {
 // A report saved before video upload was restored (or one saved from a
 // device that never reached the backend) can have a file:// path that only
 // ever existed on the reporting phone. That's not a "this admin can't play
-// it" situation - useVideoPlayer() can throw synchronously trying to open a
+// it" situation - createVideoPlayer() can throw synchronously trying to open a
 // path that doesn't exist here at all, which without a guard would crash
 // this list item's render and could blank the whole screen.
 function isRemoteVideoUrl(uri: string): boolean {
@@ -97,31 +106,55 @@ function RemoteVideoThumbnail({
   overlayStyle: object;
   onPress: () => void;
 }) {
-  const player = useVideoPlayer(uri);
   const [thumbnail, setThumbnail] = useState<VideoThumbnailImage | null>(null);
 
   useEffect(() => {
     let cancelled = false;
 
+    // The player is created and released here rather than via useVideoPlayer:
+    // that hook memoizes the player but releases it in effect cleanup, so when
+    // the effect re-runs (Fast Refresh, FlatList remounting rows) it hands back
+    // an already-released native object and generateThumbnailsAsync fails with
+    // "Cannot use shared object that was already released". Owning the
+    // lifecycle also frees each row's native decoder once its frame is taken,
+    // instead of holding one ExoPlayer open per list item.
+    let player: ReturnType<typeof createVideoPlayer> | null = null;
+    const releasePlayer = () => {
+      try {
+        player?.release();
+      } catch {
+        // Already released - nothing to do.
+      }
+      player = null;
+    };
+
     // On web, generateThumbnailsAsync can throw synchronously (e.g. a CORS
     // "tainted canvas" error on cross-origin video URLs) instead of rejecting
     // a promise, which would otherwise bypass the .catch() below entirely.
     try {
-      Promise.resolve(player.generateThumbnailsAsync(0))
+      player = createVideoPlayer(uri);
+      Promise.resolve(player.generateThumbnailsAsync(0, { maxWidth: 320 }))
         .then(([frame]) => {
           if (!cancelled) setThumbnail(frame);
         })
         .catch((error) => {
-          console.warn("Error generating video thumbnail:", error);
-        });
+          // A row that unmounted mid-generation released its player on
+          // purpose; that rejection isn't worth a warning.
+          if (!cancelled) {
+            console.warn("Error generating video thumbnail:", error);
+          }
+        })
+        .finally(releasePlayer);
     } catch (error) {
       console.warn("Error generating video thumbnail:", error);
+      releasePlayer();
     }
 
     return () => {
       cancelled = true;
+      releasePlayer();
     };
-  }, [player]);
+  }, [uri]);
 
   return (
     <TouchableOpacity style={style} onPress={onPress} activeOpacity={0.8}>
@@ -224,10 +257,80 @@ export default function AdminIncidentsScreen() {
     loadIncidents();
   }, [loadIncidents]);
 
-  const filteredIncidents = useMemo(() => {
-    if (statusFilter === "all") return incidents;
-    return incidents.filter((i) => i.status === statusFilter);
-  }, [incidents, statusFilter]);
+  const [categoryFilter, setCategoryFilter] = useState<string>(ALL_CATEGORIES);
+
+  // An agency admin gets their agency's full category list, so every type is
+  // filterable even before the first report of it arrives. A super admin spans
+  // all agencies, so they only get the categories actually present in reports.
+  const categoryOptions = useMemo<readonly string[]>(() => {
+    if (!isSuperAdmin && restrictedAgency) {
+      return INCIDENT_CATEGORIES[restrictedAgency];
+    }
+    return [
+      ...new Set(
+        incidents.map((i) => i.category).filter((c): c is string => !!c),
+      ),
+    ].sort();
+  }, [incidents, isSuperAdmin, restrictedAgency]);
+
+  // A super admin's options are derived from the loaded reports, so deleting
+  // the last report of the selected category removes its pill (or the whole
+  // row) - fall back to "All" instead of leaving an invisible, unresettable
+  // filter that hides every report.
+  const activeCategoryFilter =
+    categoryFilter === ALL_CATEGORIES || categoryOptions.includes(categoryFilter)
+      ? categoryFilter
+      : ALL_CATEGORIES;
+
+  const filteredIncidents = useMemo(
+    () =>
+      incidents.filter(
+        (i) =>
+          (statusFilter === "all" || i.status === statusFilter) &&
+          (activeCategoryFilter === ALL_CATEGORIES ||
+            i.category === activeCategoryFilter),
+      ),
+    [incidents, statusFilter, activeCategoryFilter],
+  );
+
+  // Firestore rules already scope delete to the caller's own agency (or
+  // super_admin), so this can only ever act on an incident already visible
+  // in this admin's inbox - no separate agency check needed client-side.
+  const deleteIncident = async (id: string) => {
+    setIncidents((prev) => prev.filter((i) => i.id !== id));
+
+    const result = await deleteIncidentReport(id);
+    if (!result.success) {
+      // Re-fetch instead of restoring a snapshot taken before the optimistic
+      // update - a snapshot can be stale by the time this resolves (e.g. a
+      // concurrent pull-to-refresh already replaced it), and restoring it
+      // would silently discard that newer data.
+      await loadIncidents(true);
+      showAlert("Delete Failed", "Couldn't delete this incident report. Please try again.");
+      return;
+    }
+
+    // A concurrent refresh that resolved while this delete was still in
+    // flight could have reintroduced this incident (server hadn't processed
+    // the delete yet when that refresh read the list) - re-sync so the
+    // now-genuinely-deleted incident doesn't linger until the next manual pull.
+    await loadIncidents(true);
+  };
+
+  const confirmDelete = (item: Incident) => {
+    showAlert(
+      "Delete Incident Report",
+      `Delete this ${item.involvedAgency ?? ""} incident report? This cannot be undone.`,
+      [
+        { text: "Cancel", style: "cancel" },
+        {
+          text: "Delete",
+          style: "destructive",
+          onPress: () => deleteIncident(item.id),
+        },
+      ],
+    );
+  };
 
   const styles = StyleSheet.create({
     container: {
@@ -240,11 +343,7 @@ export default function AdminIncidentsScreen() {
       backgroundColor: isDark ? "#1a1a2e" : "#ffffff",
       borderBottomLeftRadius: 16,
       borderBottomRightRadius: 16,
-      elevation: 2,
-      shadowColor: "#000",
-      shadowOffset: { width: 0, height: 1 },
-      shadowOpacity: 0.1,
-      shadowRadius: 4,
+      boxShadow: "0px 1px 4px rgba(0, 0, 0, 0.1)",
     },
     headerRow: {
       flexDirection: "row",
@@ -294,6 +393,10 @@ export default function AdminIncidentsScreen() {
     statusPillTextActive: {
       color: "#fff",
     },
+    categoryFilterRow: {
+      gap: 6,
+      marginTop: 8,
+    },
     // List
     listContent: {
       padding: 16,
@@ -314,11 +417,7 @@ export default function AdminIncidentsScreen() {
       borderRadius: 14,
       padding: 14,
       marginBottom: 12,
-      elevation: 2,
-      shadowColor: "#000",
-      shadowOffset: { width: 0, height: 1 },
-      shadowOpacity: 0.08,
-      shadowRadius: 4,
+      boxShadow: "0px 1px 4px rgba(0, 0, 0, 0.08)",
     },
     cardHeader: {
       flexDirection: "row",
@@ -373,7 +472,7 @@ export default function AdminIncidentsScreen() {
       overflow: "hidden",
     },
     thumbnailPlayOverlay: {
-      ...StyleSheet.absoluteFillObject,
+      ...StyleSheet.absoluteFill,
       alignItems: "center",
       justifyContent: "center",
       backgroundColor: "rgba(0,0,0,0.15)",
@@ -398,13 +497,31 @@ export default function AdminIncidentsScreen() {
       fontSize: 13,
       fontWeight: "600",
     },
+    deleteButton: {
+      flexDirection: "row",
+      alignItems: "center",
+      justifyContent: "center",
+      gap: 6,
+      backgroundColor: isDark ? "#3a1a1a" : "#fdecea",
+      paddingVertical: 10,
+      paddingHorizontal: 14,
+      borderRadius: 8,
+    },
+    deleteText: {
+      color: "#FF3B30",
+      fontSize: 13,
+      fontWeight: "600",
+    },
   });
 
   const renderIncident = ({ item }: { item: Incident }) => (
     <View style={styles.card}>
       <View style={styles.cardHeader}>
         <Text style={styles.situation}>
-          {item.situation || item.description || "Incident Report"}
+          {item.category ||
+            item.situation ||
+            item.description ||
+            "Incident Report"}
         </Text>
         <View style={styles.cardBadges}>
           {item.involvedAgency && (
@@ -437,9 +554,10 @@ export default function AdminIncidentsScreen() {
       <Text style={styles.metaText}>
         Reporter: {item.userEmail || "Unknown"}
       </Text>
-      <Text style={styles.metaText}>
-        Injury: {item.injuryLevel || "Not specified"}
-      </Text>
+      {/* Only reports made before Incident replaced Injury Level have one. */}
+      {item.injuryLevel ? (
+        <Text style={styles.metaText}>Injury: {item.injuryLevel}</Text>
+      ) : null}
       <Text style={styles.metaText}>
         Location: {item.location || "Not provided"}
       </Text>
@@ -471,6 +589,12 @@ export default function AdminIncidentsScreen() {
         >
           <Ionicons name="eye-outline" size={16} color="#007AFF" />
           <Text style={styles.viewDetailText}>View Details</Text>
+        </TouchableOpacity>
+        <TouchableOpacity
+          style={styles.deleteButton}
+          onPress={() => confirmDelete(item)}
+        >
+          <Ionicons name="trash-outline" size={16} color="#FF3B30" />
         </TouchableOpacity>
       </View>
     </View>
@@ -512,6 +636,35 @@ export default function AdminIncidentsScreen() {
             </TouchableOpacity>
           ))}
         </View>
+
+        {/* Category Filter - scrolls sideways since agencies have 6-7 types */}
+        {categoryOptions.length > 0 && (
+          <ScrollView
+            horizontal
+            showsHorizontalScrollIndicator={false}
+            contentContainerStyle={styles.categoryFilterRow}
+          >
+            {[ALL_CATEGORIES, ...categoryOptions].map((category) => (
+              <TouchableOpacity
+                key={category}
+                style={[
+                  styles.statusPill,
+                  activeCategoryFilter === category && styles.statusPillActive,
+                ]}
+                onPress={() => setCategoryFilter(category)}
+              >
+                <Text
+                  style={[
+                    styles.statusPillText,
+                    activeCategoryFilter === category && styles.statusPillTextActive,
+                  ]}
+                >
+                  {category === ALL_CATEGORIES ? "All incidents" : category}
+                </Text>
+              </TouchableOpacity>
+            ))}
+          </ScrollView>
+        )}
       </View>
 
       {loading ? (

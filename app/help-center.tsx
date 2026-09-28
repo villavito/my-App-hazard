@@ -61,8 +61,7 @@ export default function HelpCenterScreen() {
     },
     faqCard: {
       backgroundColor: isDark ? '#1a1a1a' : '#fff', borderRadius: 14, marginBottom: 10,
-      overflow: 'hidden', elevation: 1, shadowColor: '#000',
-      shadowOffset: { width: 0, height: 1 }, shadowOpacity: 0.08, shadowRadius: 2,
+      overflow: 'hidden', boxShadow: '0px 1px 2px rgba(0, 0, 0, 0.08)',
     },
     faqQuestion: {
       flexDirection: 'row', alignItems: 'center', padding: 16,
@@ -78,8 +77,7 @@ export default function HelpCenterScreen() {
     },
     contactCard: {
       backgroundColor: isDark ? '#1a1a1a' : '#fff', borderRadius: 14, padding: 20, marginTop: 8,
-      elevation: 1, shadowColor: '#000',
-      shadowOffset: { width: 0, height: 1 }, shadowOpacity: 0.08, shadowRadius: 2,
+      boxShadow: '0px 1px 2px rgba(0, 0, 0, 0.08)',
     },
     contactTitle: { fontSize: 18, fontWeight: '700', color: isDark ? '#fff' : '#000', marginBottom: 8 },
     contactText: { fontSize: 14, color: isDark ? '#ccc' : '#555', lineHeight: 22, marginBottom: 4 },

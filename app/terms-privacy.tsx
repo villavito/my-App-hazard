@@ -22,8 +22,7 @@ export default function TermsPrivacyScreen() {
     content: { padding: 20 },
     card: {
       backgroundColor: isDark ? '#1a1a1a' : '#fff', borderRadius: 14, padding: 20,
-      marginBottom: 16, elevation: 1, shadowColor: '#000',
-      shadowOffset: { width: 0, height: 1 }, shadowOpacity: 0.08, shadowRadius: 2,
+      marginBottom: 16, boxShadow: '0px 1px 2px rgba(0, 0, 0, 0.08)',
     },
     cardTitle: { fontSize: 18, fontWeight: '700', color: isDark ? '#fff' : '#000', marginBottom: 8 },
     text: { fontSize: 14, color: isDark ? '#ccc' : '#555', lineHeight: 22, marginBottom: 8 },

@@ -1,7 +1,7 @@
 import { Ionicons } from "@expo/vector-icons";
 import * as Location from "expo-location";
 import { useRouter } from "expo-router";
-import React, { useEffect, useState } from "react";
+import { useEffect, useState } from "react";
 import {
   ActivityIndicator,
   Linking,
@@ -22,7 +22,10 @@ import { showAlert } from "../../utils/crossPlatformAlert";
 // WMO weather codes (https://open-meteo.com/en/docs) collapsed into a small
 // set of icon/label buckets - the API returns a granular code but the widget
 // only has room for a short description.
-const WEATHER_CODES: Record<number, { label: string; icon: keyof typeof Ionicons.glyphMap }> = {
+const WEATHER_CODES: Record<
+  number,
+  { label: string; icon: keyof typeof Ionicons.glyphMap }
+> = {
   0: { label: "Clear sky", icon: "sunny-outline" },
   1: { label: "Mostly clear", icon: "partly-sunny-outline" },
   2: { label: "Partly cloudy", icon: "partly-sunny-outline" },
@@ -47,7 +50,9 @@ const WEATHER_CODES: Record<number, { label: string; icon: keyof typeof Ionicons
 };
 
 function describeWeatherCode(code: number) {
-  return WEATHER_CODES[code] ?? { label: "Unknown", icon: "help-outline" as const };
+  return (
+    WEATHER_CODES[code] ?? { label: "Unknown", icon: "help-outline" as const }
+  );
 }
 
 export default function HomeScreen() {
@@ -63,10 +68,14 @@ export default function HomeScreen() {
   });
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
-  const [weather, setWeather] = useState<{ temperature: number; code: number } | null>(null);
+  const [weather, setWeather] = useState<{
+    temperature: number;
+    code: number;
+  } | null>(null);
   const [weatherError, setWeatherError] = useState<string | null>(null);
   const [weatherLoading, setWeatherLoading] = useState(true);
-  const [weatherPermissionBlocked, setWeatherPermissionBlocked] = useState(false);
+  const [weatherPermissionBlocked, setWeatherPermissionBlocked] =
+    useState(false);
 
   const fetchWeather = async () => {
     setWeatherLoading(true);
@@ -95,18 +104,56 @@ export default function HomeScreen() {
         return;
       }
 
-      const position = await Promise.race([
-        Location.getCurrentPositionAsync({ accuracy: Location.Accuracy.Low }),
-        new Promise<never>((_, reject) =>
-          setTimeout(() => reject(new Error("Timed out waiting for a GPS fix")), 10000),
-        ),
-      ]);
+      if (!(await Location.hasServicesEnabledAsync())) {
+        setWeatherError("Turn on location services for weather");
+        return;
+      }
 
-      const response = await fetch(
-        `https://api.open-meteo.com/v1/forecast?latitude=${position.coords.latitude}&longitude=${position.coords.longitude}&current_weather=true`,
-      );
-      if (!response.ok) throw new Error(`Weather request failed (${response.status})`);
-      const json = await response.json();
+      // Weather only needs a rough position, so a recent cached fix (instant,
+      // works indoors) beats waiting on a fresh GPS lock, which indoors or on
+      // a cold start regularly took longer than the old 10s timeout.
+      let position = await Location.getLastKnownPositionAsync({
+        maxAge: 30 * 60 * 1000,
+        requiredAccuracy: 5000,
+      });
+
+      if (!position) {
+        let timeoutId: ReturnType<typeof setTimeout> | undefined;
+        try {
+          position = await Promise.race([
+            Location.getCurrentPositionAsync({
+              accuracy: Location.Accuracy.Lowest,
+            }),
+            new Promise<never>((_, reject) => {
+              timeoutId = setTimeout(
+                () => reject(new Error("Timed out waiting for a GPS fix")),
+                20000,
+              );
+            }),
+          ]);
+        } finally {
+          clearTimeout(timeoutId);
+        }
+      }
+
+      const url = `https://api.open-meteo.com/v1/forecast?latitude=${position.coords.latitude}&longitude=${position.coords.longitude}&current_weather=true`;
+
+      // Android's OkHttp sometimes reuses a keep-alive connection the server
+      // already closed and fails with "unexpected end of stream"; a retry
+      // opens a fresh connection and almost always succeeds.
+      let json: any;
+      for (let attempt = 1; ; attempt++) {
+        try {
+          const response = await fetch(url);
+          if (!response.ok)
+            throw new Error(`Weather request failed (${response.status})`);
+          json = await response.json();
+          break;
+        } catch (fetchError) {
+          if (attempt >= 3) throw fetchError;
+          await new Promise((resolve) => setTimeout(resolve, 1000 * attempt));
+        }
+      }
 
       setWeather({
         temperature: Math.round(json.current_weather.temperature),
@@ -214,11 +261,7 @@ export default function HomeScreen() {
       padding: 14,
       borderRadius: 14,
       alignItems: "center",
-      elevation: 2,
-      shadowColor: "#000",
-      shadowOffset: { width: 0, height: 1 },
-      shadowOpacity: 0.1,
-      shadowRadius: 3,
+      boxShadow: "0px 1px 3px rgba(0, 0, 0, 0.1)",
     },
     statNumber: {
       fontSize: 22,
@@ -242,16 +285,12 @@ export default function HomeScreen() {
       backgroundColor: isDark ? "#1a1a1a" : "#fff",
       borderRadius: 14,
       padding: 14,
-      elevation: 2,
-      shadowColor: "#000",
-      shadowOffset: { width: 0, height: 1 },
-      shadowOpacity: 0.1,
-      shadowRadius: 3,
+      boxShadow: "0px 1px 3px rgba(0, 0, 0, 0.1)",
     },
     dateCardMonth: {
       fontSize: 12,
       fontWeight: "700",
-      color: "#007AFF",
+      color: "#7a5f4a",
       letterSpacing: 1,
     },
     dateCardDay: {
@@ -311,11 +350,7 @@ export default function HomeScreen() {
       padding: 20,
       borderRadius: 16,
       alignItems: "center",
-      elevation: 2,
-      shadowColor: "#000",
-      shadowOffset: { width: 0, height: 1 },
-      shadowOpacity: 0.1,
-      shadowRadius: 3,
+      boxShadow: "0px 1px 3px rgba(0, 0, 0, 0.1)",
     },
     actionIcon: {
       marginBottom: 10,
@@ -386,7 +421,9 @@ export default function HomeScreen() {
         <View style={styles.widgetRow}>
           <View style={styles.widgetCard}>
             <Text style={styles.dateCardMonth}>
-              {new Date().toLocaleDateString("en-US", { month: "long" }).toUpperCase()}
+              {new Date()
+                .toLocaleDateString("en-US", { month: "long" })
+                .toUpperCase()}
             </Text>
             <Text style={styles.dateCardDay}>{new Date().getDate()}</Text>
             <Text style={styles.dateCardWeekday}>
@@ -418,7 +455,9 @@ export default function HomeScreen() {
             ) : weather ? (
               <>
                 <View style={styles.weatherCardTop}>
-                  <Text style={styles.weatherTemp}>{weather.temperature}°C</Text>
+                  <Text style={styles.weatherTemp}>
+                    {weather.temperature}°C
+                  </Text>
                   <Ionicons
                     name={describeWeatherCode(weather.code).icon}
                     size={28}

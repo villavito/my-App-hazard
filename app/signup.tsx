@@ -14,6 +14,7 @@ import {
   View,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
+import { inferAgencyFromEmail } from "../constants/agencies";
 import { createUserWithRole } from "../services/authService";
 import { showAlert } from "../utils/crossPlatformAlert";
 
@@ -141,7 +142,7 @@ export default function SignupScreen() {
 
     let assignedRole: "user" | "admin" | "super_admin" = "user";
 
-    if (trimmedEmailLower.endsWith("@super_admin.com")) {
+    if (trimmedEmailLower.endsWith("@superadmin.com")) {
       assignedRole = "super_admin";
     } else if (trimmedEmailLower.endsWith("@admin.com")) {
       assignedRole = "admin";
@@ -150,14 +151,18 @@ export default function SignupScreen() {
     setLoading(true);
 
     try {
-      // Admin accounts created here have no agency - assign one afterward via
-      // the Firestore console (users/{uid}.agency, one of the values in
-      // constants/agencies.ts) so the account shows up in that agency's inbox.
+      // An admin's agency comes from its email (e.g. ldrrmc01@admin.com ->
+      // LDRRMC), which also makes that agency selectable on the citizens'
+      // report screen straight away. An address that names no agency gets
+      // none - a super admin assigns it from the Super Admin dashboard.
       const result = await createUserWithRole(
         trimmedEmailLower,
         password,
         name.trim(),
         assignedRole,
+        assignedRole === "admin"
+          ? inferAgencyFromEmail(trimmedEmailLower)
+          : undefined,
       );
       if (result.success && result.user) {
         const selectedRole = result.user.role;
@@ -181,14 +186,20 @@ export default function SignupScreen() {
             [
               { text: "Cancel", style: "cancel" },
               { text: "Sign In", onPress: () => router.replace("/login") },
-            ]
+            ],
           );
         } else if (errorMessage.includes("auth/weak-password")) {
-          showAlert("Weak Password", "Password should be at least 6 characters.");
+          showAlert(
+            "Weak Password",
+            "Password should be at least 6 characters.",
+          );
         } else if (errorMessage.includes("auth/invalid-email")) {
           showAlert("Invalid Email", "Please enter a valid email address.");
         } else if (errorMessage.includes("auth/operation-not-allowed")) {
-          showAlert("Error", "Email/password accounts are not enabled. Please contact support.");
+          showAlert(
+            "Error",
+            "Email/password accounts are not enabled. Please contact support.",
+          );
         } else {
           showAlert("Signup Error", result.error || "Unable to create account");
         }
@@ -202,7 +213,7 @@ export default function SignupScreen() {
           [
             { text: "Cancel", style: "cancel" },
             { text: "Sign In", onPress: () => router.replace("/login") },
-          ]
+          ],
         );
       } else if (errorMessage.includes("auth/weak-password")) {
         showAlert("Weak Password", "Password should be at least 6 characters.");

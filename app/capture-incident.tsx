@@ -2,6 +2,7 @@ import { Ionicons } from "@expo/vector-icons";
 import * as ImagePicker from "expo-image-picker";
 import * as Location from "expo-location";
 import { useLocalSearchParams, useRouter } from "expo-router";
+import { type File, UploadTask, UploadType } from "expo-file-system";
 import { useVideoPlayer, VideoView } from "expo-video";
 import { doc, serverTimestamp, setDoc } from "firebase/firestore";
 import React, { useEffect, useState } from "react";
@@ -19,20 +20,34 @@ import {
 import { SafeAreaView } from "react-native-safe-area-context";
 import { API_BASE_URL_CANDIDATES } from "../config/api";
 import { db } from "../config/firebase";
-import { type Agency } from "../constants/agencies";
+import { AGENCIES, type Agency } from "../constants/agencies";
+import { INCIDENT_CATEGORIES } from "../constants/incidentCategories";
 import { useAuth } from "../contexts/AuthContext";
-import { getActiveAgencies } from "../services/firestoreService";
+import { subscribeToActiveAgencies } from "../services/firestoreService";
 import { showAlert } from "../utils/crossPlatformAlert";
+import { copyVideoToCache, resolveLocalFile } from "../utils/localVideoFile";
 
 
-const INJURY_LEVEL_OPTIONS = [
-  "No Injury",
-  "Minor (First Aid)",
-  "Moderate (Medical Attention)",
-  "Serious (Hospitalization)",
-  "Critical (Life-threatening)",
-  "Fatality",
-];
+async function isBackendReachable(baseUrl: string): Promise<boolean> {
+  const controller = new AbortController();
+  const timeoutId = setTimeout(() => controller.abort(), 3000);
+  try {
+    const response = await fetch(`${baseUrl}/health`, {
+      signal: controller.signal,
+    });
+    return response.ok;
+  } catch {
+    return false;
+  } finally {
+    clearTimeout(timeoutId);
+  }
+}
+
+// Each option row is ~48px (14px padding top/bottom + text + divider). Capping
+// the list at 4.5 rows makes it scroll as soon as there are more than four
+// options, and the half-cut last row signals that there is more below.
+const DROPDOWN_ROW_HEIGHT = 48;
+const DROPDOWN_VISIBLE_ROWS = 4.5;
 
 type DropdownFieldProps = {
   label: string;
@@ -41,6 +56,8 @@ type DropdownFieldProps = {
   options: string[];
   onSelect: (value: string) => void;
   isDark: boolean;
+  /** Options listed but greyed out and not selectable, with a reason shown. */
+  disabledOptions?: Record<string, string>;
 };
 
 function DropdownField({
@@ -50,6 +67,7 @@ function DropdownField({
   options,
   onSelect,
   isDark,
+  disabledOptions = {},
 }: DropdownFieldProps) {
   const [visible, setVisible] = useState(false);
 
@@ -111,9 +129,11 @@ function DropdownField({
       fontWeight: "bold",
     },
     optionsList: {
-      // The container caps itself at 70% of the screen, but a ScrollView sizes
-      // to its content unless told to shrink - without this the option list
-      // overflows the modal and gets clipped instead of scrolling.
+      // A fixed pixel cap rather than relying on the container's 70% maxHeight:
+      // a ScrollView sizes to its content, so a short list never overflowed
+      // that percentage and never scrolled. flexShrink still keeps it inside
+      // the modal on very small screens.
+      maxHeight: DROPDOWN_ROW_HEIGHT * DROPDOWN_VISIBLE_ROWS,
       flexShrink: 1,
     },
     optionItem: {
@@ -128,6 +148,19 @@ function DropdownField({
     selectedOptionText: {
       color: "#007AFF",
       fontWeight: "600",
+    },
+    optionRow: {
+      flexDirection: "row",
+      justifyContent: "space-between",
+      alignItems: "center",
+    },
+    disabledOptionText: {
+      color: isDark ? "#555" : "#bbb",
+    },
+    disabledHint: {
+      fontSize: 12,
+      color: isDark ? "#666" : "#999",
+      fontStyle: "italic",
     },
   });
 
@@ -163,28 +196,37 @@ function DropdownField({
             <ScrollView
               style={styles.optionsList}
               showsVerticalScrollIndicator
+              persistentScrollbar
               nestedScrollEnabled
               keyboardShouldPersistTaps="handled"
             >
-              {options.map((option) => (
-                <TouchableOpacity
-                  key={option}
-                  style={styles.optionItem}
-                  onPress={() => {
-                    onSelect(option);
-                    setVisible(false);
-                  }}
-                >
-                  <Text
-                    style={[
-                      styles.optionText,
-                      value === option && styles.selectedOptionText,
-                    ]}
+              {options.map((option) => {
+                const disabledReason = disabledOptions[option];
+                return (
+                  <TouchableOpacity
+                    key={option}
+                    style={[styles.optionItem, styles.optionRow]}
+                    disabled={Boolean(disabledReason)}
+                    onPress={() => {
+                      onSelect(option);
+                      setVisible(false);
+                    }}
                   >
-                    {option}
-                  </Text>
-                </TouchableOpacity>
-              ))}
+                    <Text
+                      style={[
+                        styles.optionText,
+                        value === option && styles.selectedOptionText,
+                        disabledReason ? styles.disabledOptionText : null,
+                      ]}
+                    >
+                      {option}
+                    </Text>
+                    {disabledReason ? (
+                      <Text style={styles.disabledHint}>{disabledReason}</Text>
+                    ) : null}
+                  </TouchableOpacity>
+                );
+              })}
             </ScrollView>
           </View>
         </View>
@@ -200,7 +242,6 @@ export default function CaptureIncidentScreen() {
   const { user } = useAuth();
   const params = useLocalSearchParams();
   const [video, setVideo] = useState<string | null>(null);
-  const [injuryLevel, setInjuryLevel] = useState("");
   const [location, setLocation] = useState("");
   const [coordinates, setCoordinates] = useState<{
     latitude: number;
@@ -213,6 +254,7 @@ export default function CaptureIncidentScreen() {
   const [isLocating, setIsLocating] = useState(false);
   const [activeAgencies, setActiveAgencies] = useState<Agency[]>([]);
   const [selectedAgency, setSelectedAgency] = useState<Agency | "">("");
+  const [category, setCategory] = useState("");
 
   useEffect(() => {
     // Firebase Auth restores the session asynchronously on app start, so
@@ -220,7 +262,14 @@ export default function CaptureIncidentScreen() {
     // requires request.auth != null and would otherwise silently fail here
     // before the session finishes loading.
     if (!user) return;
-    getActiveAgencies().then(setActiveAgencies);
+    // Live listener, so an agency whose first admin was just added appears
+    // here right away (and one whose last admin was removed disappears).
+    return subscribeToActiveAgencies((agencies) => {
+      setActiveAgencies(agencies);
+      setSelectedAgency((current) =>
+        current && !agencies.includes(current) ? "" : current,
+      );
+    });
   }, [user]);
 
   useEffect(() => {
@@ -393,7 +442,18 @@ export default function CaptureIncidentScreen() {
       });
 
       if (!result.canceled && result.assets[0]) {
-        setVideo(result.assets[0].uri);
+        const pickedUri = result.assets[0].uri;
+        // Same stable copy as recorded videos get - see copyVideoToCache.
+        if (Platform.OS === "web") {
+          setVideo(pickedUri);
+        } else {
+          try {
+            setVideo(await copyVideoToCache(pickedUri));
+          } catch (copyError) {
+            console.warn("Could not copy picked video, using original:", copyError);
+            setVideo(pickedUri);
+          }
+        }
       }
     } catch (error) {
       console.error("Error uploading video:", error);
@@ -409,13 +469,15 @@ export default function CaptureIncidentScreen() {
     promise: Promise<T>,
     ms: number,
     timeoutMessage: string,
-  ): Promise<T> =>
-    Promise.race([
+  ): Promise<T> => {
+    let timeoutId: ReturnType<typeof setTimeout> | undefined;
+    return Promise.race([
       promise,
-      new Promise<T>((_, reject) =>
-        setTimeout(() => reject(new Error(timeoutMessage)), ms),
-      ),
-    ]);
+      new Promise<T>((_, reject) => {
+        timeoutId = setTimeout(() => reject(new Error(timeoutMessage)), ms);
+      }),
+    ]).finally(() => clearTimeout(timeoutId));
+  };
 
   const searchMyLocation = async () => {
     setIsLocating(true);
@@ -455,29 +517,39 @@ export default function CaptureIncidentScreen() {
         return;
       }
 
-      let position: Location.LocationObject | null = null;
+      // 1. A very recent, precise cached fix is as good as a new one for an
+      //    incident report - and it's instant, even indoors.
+      let position = await Location.getLastKnownPositionAsync({
+        maxAge: 2 * 60 * 1000,
+        requiredAccuracy: 100,
+      });
 
-      try {
-        position = await withTimeout(
-          Location.getCurrentPositionAsync({
-            accuracy: Location.Accuracy.Balanced,
-            mayShowUserSettingsDialog: true,
-          }),
-          10000,
-          "Timed out waiting for a GPS fix",
-        );
-      } catch (currentLocationError) {
-        console.warn(
-          "Current location unavailable, trying last known location:",
-          currentLocationError,
-        );
-        position = await Location.getLastKnownPositionAsync({
-          maxAge: 10 * 60 * 1000,
-          requiredAccuracy: 1000,
-        });
+      // 2. Otherwise ask for a fresh fix. Balanced uses Wi-Fi/cell towers as
+      //    well as GPS, so it resolves far sooner than waiting on satellites.
+      if (!position) {
+        try {
+          position = await withTimeout(
+            Location.getCurrentPositionAsync({
+              accuracy: Location.Accuracy.Balanced,
+              mayShowUserSettingsDialog: true,
+            }),
+            15000,
+            "Timed out waiting for a GPS fix",
+          );
+        } catch (currentLocationError) {
+          // 3. Indoors or on a cold GPS start this is expected - fall back to
+          //    an older/rougher cached fix rather than failing outright.
+          console.log(
+            "No fresh location fix yet, using last known location instead",
+          );
+          position = await Location.getLastKnownPositionAsync({
+            maxAge: 30 * 60 * 1000,
+            requiredAccuracy: 2000,
+          });
 
-        if (!position) {
-          throw currentLocationError;
+          if (!position) {
+            throw currentLocationError;
+          }
         }
       }
 
@@ -522,23 +594,22 @@ export default function CaptureIncidentScreen() {
     }
   };
 
-  const canSubmit = Boolean(video && injuryLevel && selectedAgency);
+  const canSubmit = Boolean(
+    video && selectedAgency && category,
+  );
   const isUploading = submittingAgency !== null;
 
-  // The captured video only exists as a local file/blob URI on this device.
-  // Upload it to our own backend (backend/server.js) so the resulting URL is
-  // playable from other devices (e.g. the admin dashboard). There's no single
-  // host alias that reliably reaches the dev machine from every run target
-  // (physical device vs. standard Android Studio emulator vs. Genymotion vs.
-  // iOS simulator/web), so every known candidate is tried in turn instead of
-  // betting on one guess. A short per-attempt timeout keeps an unreachable
-  // host from stalling the whole upload.
   const uploadVideoToStorage = async (
     localUri: string,
     incidentId: string,
   ): Promise<string> => {
-    const formData = new FormData();
-    formData.append("incidentId", incidentId);
+    // On web the browser owns the file, so it goes up through a regular
+    // FormData/XHR request. On Android/iOS it goes through expo-file-system's
+    // native UploadTask instead: React Native's {uri,name,type} FormData trick
+    // stopped sending files after the Expo SDK 57 / React Native 0.86 upgrade,
+    // failing with a bare "network error" even with the server reachable.
+    let webFormData: FormData | null = null;
+    let nativeFile: File | null = null;
 
     if (Platform.OS === "web") {
       const response = await fetch(localUri);
@@ -547,17 +618,80 @@ export default function CaptureIncidentScreen() {
           `Unable to read the local video file (${response.status}).`,
         );
       }
-      const blob = await response.blob();
-      formData.append("video", blob, `${incidentId}.mp4`);
+      webFormData = new FormData();
+      webFormData.append("incidentId", incidentId);
+      webFormData.append("video", await response.blob(), `${incidentId}.mp4`);
     } else {
-      // React Native's FormData accepts this {uri,name,type} descriptor and
-      // streams the file from disk instead of loading it into JS memory.
-      formData.append("video", {
-        uri: localUri,
-        name: `${incidentId}.mp4`,
-        type: "video/mp4",
-      } as unknown as Blob);
+      console.log("Uploading video file:", localUri);
+      nativeFile = resolveLocalFile(localUri);
+      if (!nativeFile) {
+        throw new Error(
+          "The video file is no longer on this phone. Record or choose the video again.",
+        );
+      }
     }
+
+    const parseUploadResponse = (status: number, body: string): string => {
+      if (status < 200 || status >= 300) {
+        console.error(`Video upload FAILED: ${status} ${body}`);
+        throw new Error(`Upload failed with status ${status}`);
+      }
+      try {
+        return (JSON.parse(body) as { path: string }).path;
+      } catch {
+        throw new Error("Invalid response from upload server");
+      }
+    };
+
+    const sendNative = async (file: File, uploadUrl: string) => {
+      const task = new UploadTask(file, uploadUrl, {
+        httpMethod: "POST",
+        uploadType: UploadType.MULTIPART,
+        fieldName: "video",
+        mimeType: "video/mp4",
+        // Sent before the file part - the backend needs incidentId first to
+        // name the saved file.
+        parameters: { incidentId },
+        onProgress: ({ bytesSent, totalBytes }) => {
+          if (totalBytes > 0) {
+            setUploadProgress(Math.round((bytesSent / totalBytes) * 100));
+          }
+        },
+      });
+      // Generous, since a phone video can be tens of MB and a public tunnel
+      // relays it through an extra hop.
+      const timeoutId = setTimeout(() => task.cancel(), 120000);
+      try {
+        const result = await task.uploadAsync();
+        return parseUploadResponse(result.status, result.body);
+      } finally {
+        clearTimeout(timeoutId);
+      }
+    };
+
+    const sendWeb = (formData: FormData, uploadUrl: string) =>
+      new Promise<string>((resolve, reject) => {
+        const xhr = new XMLHttpRequest();
+        xhr.open("POST", uploadUrl);
+        xhr.timeout = 120000;
+        xhr.upload.onprogress = (event) => {
+          if (event.lengthComputable) {
+            setUploadProgress(Math.round((event.loaded / event.total) * 100));
+          }
+        };
+        xhr.onload = () => {
+          try {
+            resolve(parseUploadResponse(xhr.status, xhr.responseText));
+          } catch (error) {
+            reject(error);
+          }
+        };
+        xhr.onerror = () =>
+          reject(new Error(`Network error uploading to ${uploadUrl}`));
+        xhr.ontimeout = () =>
+          reject(new Error(`Timed out uploading to ${uploadUrl}`));
+        xhr.send(formData);
+      });
 
     let lastError: Error | null = null;
 
@@ -570,46 +704,23 @@ export default function CaptureIncidentScreen() {
     for (let round = 1; round <= MAX_ROUNDS; round += 1) {
       for (const baseUrl of API_BASE_URL_CANDIDATES) {
         const uploadUrl = `${baseUrl}/upload-video`;
+
+        // Check the host first so dead candidates (emulator-only IPs, an
+        // expired tunnel) are skipped in seconds instead of each getting a
+        // full video upload attempt.
+        if (!(await isBackendReachable(baseUrl))) {
+          console.warn(`Backend not reachable at ${baseUrl}, skipping`);
+          lastError = new Error(`Backend not reachable at ${baseUrl}`);
+          continue;
+        }
+
         console.log(`Video upload attempt (round ${round}) -> ${uploadUrl}`);
         setUploadProgress(0);
 
         try {
-          const relativePath = await new Promise<string>((resolve, reject) => {
-            const xhr = new XMLHttpRequest();
-            xhr.open("POST", uploadUrl);
-            // Longer than the LAN candidates need, since a public tunnel
-            // relays the whole video through an extra hop.
-            xhr.timeout = 20000;
-            xhr.upload.onprogress = (event) => {
-              if (event.lengthComputable) {
-                setUploadProgress(
-                  Math.round((event.loaded / event.total) * 100),
-                );
-              }
-            };
-            xhr.onload = () => {
-              if (xhr.status >= 200 && xhr.status < 300) {
-                try {
-                  const response = JSON.parse(xhr.responseText) as {
-                    path: string;
-                  };
-                  resolve(response.path);
-                } catch {
-                  reject(new Error("Invalid response from upload server"));
-                }
-              } else {
-                console.error(
-                  `Video upload FAILED: ${xhr.status} ${xhr.responseText}`,
-                );
-                reject(new Error(`Upload failed with status ${xhr.status}`));
-              }
-            };
-            xhr.onerror = () =>
-              reject(new Error(`Network error uploading to ${uploadUrl}`));
-            xhr.ontimeout = () =>
-              reject(new Error(`Timed out uploading to ${uploadUrl}`));
-            xhr.send(formData);
-          });
+          const relativePath = nativeFile
+            ? await sendNative(nativeFile, uploadUrl)
+            : await sendWeb(webFormData as FormData, uploadUrl);
 
           console.log(`Video upload succeeded via ${baseUrl}`);
           return `${baseUrl.replace(/\/api$/, "")}${relativePath}`;
@@ -640,8 +751,8 @@ export default function CaptureIncidentScreen() {
     if (!canSubmit) {
       const missingFields = [
         !video ? "video" : null,
-        !injuryLevel ? "injury level" : null,
         !selectedAgency ? "agency" : null,
+        !category ? "incident" : null,
       ].filter(Boolean);
 
       showAlert(
@@ -678,8 +789,8 @@ export default function CaptureIncidentScreen() {
         userId: user.uid,
         userEmail: user.email ?? "",
         videoUrl,
-        injuryLevel,
         involvedAgency: agency,
+        category,
         location: location.trim(),
         coordinates,
         status: "pending",
@@ -824,26 +935,40 @@ export default function CaptureIncidentScreen() {
           ) : null}
         </View>
 
+        {/* Every agency is listed so citizens can see who exists; ones with no
+            admin watching the inbox yet are greyed out and can't be picked. */}
         <DropdownField
-          label="Injury Level"
-          value={injuryLevel}
-          placeholder="Select injury level..."
-          options={INJURY_LEVEL_OPTIONS}
-          onSelect={setInjuryLevel}
+          label="Agency"
+          value={selectedAgency}
+          placeholder="Select an agency..."
+          options={[...AGENCIES]}
+          disabledOptions={Object.fromEntries(
+            AGENCIES.filter((agency) => !activeAgencies.includes(agency)).map(
+              (agency) => [agency, "No admin yet"],
+            ),
+          )}
+          onSelect={(value) => {
+            // Incident types belong to an agency, so switching agencies
+            // clears whatever was picked from the previous agency's list.
+            if (value !== selectedAgency) setCategory("");
+            setSelectedAgency(value as Agency);
+          }}
           isDark={isDark}
         />
 
+        {selectedAgency ? (
+          <DropdownField
+            label="Incident"
+            value={category}
+            placeholder="Select the incident..."
+            options={[...INCIDENT_CATEGORIES[selectedAgency]]}
+            onSelect={setCategory}
+            isDark={isDark}
+          />
+        ) : null}
+
         {activeAgencies.length > 0 ? (
           <>
-            <DropdownField
-              label="Agency"
-              value={selectedAgency}
-              placeholder="Select an agency..."
-              options={activeAgencies}
-              onSelect={(value) => setSelectedAgency(value as Agency)}
-              isDark={isDark}
-            />
-
             <View style={styles.agencySubmitRow}>
               <TouchableOpacity
                 style={[

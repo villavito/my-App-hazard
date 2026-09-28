@@ -3,34 +3,74 @@ import {
   signInWithEmailAndPassword,
   signOut,
   updateProfile,
-} from 'firebase/auth';
-import { doc, getDocFromServer, serverTimestamp, setDoc } from 'firebase/firestore';
-import { db, getAuthInstance } from '../config/firebase';
-import type { Agency } from '../constants/agencies';
-import { setAgencyActive } from './firestoreService';
+} from "firebase/auth";
+import {
+  doc,
+  getDocFromServer,
+  serverTimestamp,
+  setDoc,
+  updateDoc,
+} from "firebase/firestore";
+import { db, getAuthInstance } from "../config/firebase";
+import { inferAgencyFromEmail, type Agency } from "../constants/agencies";
+import { setAgencyActive } from "./firestoreService";
 
 export interface UserRole {
   uid: string;
   email: string;
   displayName: string;
-  role: 'user' | 'admin' | 'super_admin';
+  role: "user" | "admin" | "super_admin";
   // Which agency's inbox this admin can see. Unset (e.g. for super_admin) means no agency is restricted.
   agency?: Agency;
   createdAt: any;
   lastLogin: any;
 }
 
+// Turn a Firebase Auth error code into something a user should see, instead of
+// the raw "Firebase: Error (auth/invalid-credential)." string. Firebase now
+// collapses wrong-password and unknown-email into the single
+// `auth/invalid-credential` code (email-enumeration protection), so the message
+// deliberately can't say which one it was.
+export const friendlyAuthError = (
+  code: string | undefined,
+  fallback = "Something went wrong. Please try again.",
+): string => {
+  switch (code) {
+    case "auth/invalid-credential":
+    case "auth/wrong-password":
+    case "auth/user-not-found":
+    case "auth/invalid-email":
+      return "Incorrect email or password.";
+    case "auth/user-disabled":
+      return "This account has been disabled.";
+    case "auth/too-many-requests":
+      return "Too many attempts. Please wait a moment and try again.";
+    case "auth/network-request-failed":
+      return "Network error. Check your connection and try again.";
+    case "auth/email-already-in-use":
+      return "An account with this email already exists.";
+    case "auth/weak-password":
+      return "Password is too weak. Use at least 6 characters.";
+    default:
+      return fallback;
+  }
+};
+
 // Create user with role
 export const createUserWithRole = async (
   email: string,
   password: string,
   displayName: string,
-  role: 'user' | 'admin' | 'super_admin' = 'user',
-  agency?: Agency
+  role: "user" | "admin" | "super_admin" = "user",
+  agency?: Agency,
 ) => {
   try {
     const auth = getAuthInstance();
-    const userCredential = await createUserWithEmailAndPassword(auth, email, password);
+    const userCredential = await createUserWithEmailAndPassword(
+      auth,
+      email,
+      password,
+    );
     const user = userCredential.user;
 
     await updateProfile(user, { displayName });
@@ -46,20 +86,23 @@ export const createUserWithRole = async (
       lastLogin: serverTimestamp(),
     };
 
-    await setDoc(doc(db, 'users', user.uid), userRole);
+    await setDoc(doc(db, "users", user.uid), userRole);
 
     // Mark this agency as having an active admin so the report-incident
     // screen shows a submit button for it.
-    if (role === 'admin' && agency) {
+    if (role === "admin" && agency) {
       await setAgencyActive(agency);
     }
 
     return { success: true, user: userRole };
   } catch (error: any) {
-    console.error('Auth service error:', error);
-    console.error('Error code:', error.code);
-    console.error('Error message:', error.message);
-    return { success: false, error: error.message || 'Failed to create account' };
+    console.error("Auth service error:", error);
+    console.error("Error code:", error.code);
+    console.error("Error message:", error.message);
+    return {
+      success: false,
+      error: error.message || "Failed to create account",
+    };
   }
 };
 
@@ -67,39 +110,68 @@ export const createUserWithRole = async (
 export const signInUser = async (email: string, password: string) => {
   try {
     const auth = getAuthInstance();
-    const userCredential = await signInWithEmailAndPassword(auth, email, password);
+    const userCredential = await signInWithEmailAndPassword(
+      auth,
+      email,
+      password,
+    );
     const user = userCredential.user;
 
     // Get user role from Firestore
     // getDocFromServer (not getDoc) so a stale local cache from before an
     // out-of-band Firestore edit can never be served here - this value drives
     // which agency inbox the admin sees, so it must always be current.
-    const userDoc = await getDocFromServer(doc(db, 'users', user.uid));
+    const userDoc = await getDocFromServer(doc(db, "users", user.uid));
     if (userDoc.exists()) {
       const userData = userDoc.data() as UserRole;
 
       // Update last login
-      await setDoc(doc(db, 'users', user.uid), {
-        ...userData,
-        lastLogin: serverTimestamp(),
-      }, { merge: true });
+      await setDoc(
+        doc(db, "users", user.uid),
+        {
+          ...userData,
+          lastLogin: serverTimestamp(),
+        },
+        { merge: true },
+      );
+
+      // An admin that signed up before agencies were read from the email has
+      // none - fill it in from the address now. Its own write, separate from
+      // the lastLogin one above, because firestore.rules only allows this
+      // one-time, email-matching agency change, and a rejection here (e.g.
+      // rules not yet deployed) must not fail the whole login.
+      if (userData.role === "admin" && !userData.agency) {
+        const inferred = inferAgencyFromEmail(userData.email ?? email);
+        if (inferred) {
+          try {
+            await updateDoc(doc(db, "users", user.uid), { agency: inferred });
+            userData.agency = inferred;
+          } catch (error) {
+            console.warn("Could not assign agency from email:", error);
+          }
+        }
+      }
 
       // Re-assert this admin's agency on every sign-in. Accounts created before
       // the agencies collection existed never registered themselves, so their
       // agency stays missing from the report screen's dropdown. Doing it here
       // lets those accounts self-heal just by logging in.
-      if (userData.role === 'admin' && userData.agency) {
+      if (userData.role === "admin" && userData.agency) {
         await setAgencyActive(userData.agency);
       }
 
       return { success: true, user: userData };
     } else {
-      return { success: false, error: 'User role not found' };
+      return { success: false, error: "User role not found" };
     }
   } catch (error: any) {
-    // Pass the code up as well - callers need it to tell auth/invalid-credential
-    // apart from e.g. a network failure, which the message alone doesn't convey.
-    return { success: false, error: error.message, code: error.code };
+    // `error` is the user-facing message; `code` is the raw Firebase code, kept
+    // for callers that want to branch on it (e.g. network failure vs bad login).
+    return {
+      success: false,
+      error: friendlyAuthError(error.code, "Login failed. Please try again."),
+      code: error.code,
+    };
   }
 };
 
@@ -109,7 +181,7 @@ export const signOutUser = async () => {
     await signOut(auth);
     return { success: true };
   } catch (error: any) {
-    return { success: false, error: error.message || 'Failed to sign out' };
+    return { success: false, error: error.message || "Failed to sign out" };
   }
 };
 
@@ -118,23 +190,23 @@ export const getUserRole = async (uid: string): Promise<UserRole | null> => {
   try {
     // getDocFromServer - see the comment in signInUser for why this must
     // never be served from a stale local cache.
-    const userDoc = await getDocFromServer(doc(db, 'users', uid));
+    const userDoc = await getDocFromServer(doc(db, "users", uid));
     if (userDoc.exists()) {
       return userDoc.data() as UserRole;
     }
     return null;
   } catch (error) {
-    console.error('Error getting user role:', error);
+    console.error("Error getting user role:", error);
     return null;
   }
 };
 
 // Check if user is admin or super admin
 export const isAdmin = (userRole: UserRole): boolean => {
-  return userRole.role === 'admin' || userRole.role === 'super_admin';
+  return userRole.role === "admin" || userRole.role === "super_admin";
 };
 
 // Check if user is super admin
 export const isSuperAdmin = (userRole: UserRole): boolean => {
-  return userRole.role === 'super_admin';
+  return userRole.role === "super_admin";
 };

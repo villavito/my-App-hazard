@@ -40,6 +40,7 @@ type Incident = {
   situation?: string;
   description?: string;
   injuryLevel?: string;
+  category?: string;
   location?: string;
   status?: string;
   agency?: string;
@@ -278,11 +279,7 @@ export default function IncidentDetailScreen() {
       borderRadius: 16,
       padding: 20,
       marginBottom: 16,
-      elevation: 2,
-      shadowColor: "#000",
-      shadowOffset: { width: 0, height: 1 },
-      shadowOpacity: 0.1,
-      shadowRadius: 4,
+      boxShadow: "0px 1px 4px rgba(0, 0, 0, 0.1)",
     },
     infoTitle: {
       fontSize: 20,
@@ -353,11 +350,7 @@ export default function IncidentDetailScreen() {
       backgroundColor: isDark ? "#1a1a2e" : "#ffffff",
       borderRadius: 16,
       padding: 16,
-      elevation: 2,
-      shadowColor: "#000",
-      shadowOffset: { width: 0, height: 1 },
-      shadowOpacity: 0.1,
-      shadowRadius: 4,
+      boxShadow: "0px 1px 4px rgba(0, 0, 0, 0.1)",
     },
     commentTitle: {
       fontSize: 16,
@@ -391,11 +384,7 @@ export default function IncidentDetailScreen() {
       backgroundColor: isDark ? "#1a1a2e" : "#ffffff",
       borderRadius: 16,
       padding: 20,
-      elevation: 2,
-      shadowColor: "#000",
-      shadowOffset: { width: 0, height: 1 },
-      shadowOpacity: 0.1,
-      shadowRadius: 4,
+      boxShadow: "0px 1px 4px rgba(0, 0, 0, 0.1)",
     },
     timelineTitle: {
       fontSize: 16,
@@ -629,7 +618,7 @@ export default function IncidentDetailScreen() {
           {/* Incident Info */}
           <View style={styles.infoCard}>
             <Text style={styles.infoTitle}>
-              {incident.situation || "Incident Report"}
+              {incident.category || incident.situation || "Incident Report"}
             </Text>
             {incident.description && (
               <Text style={styles.infoDescription}>{incident.description}</Text>
@@ -652,30 +641,48 @@ export default function IncidentDetailScreen() {
 
             <View style={styles.infoRow}>
               <Ionicons
-                name="medkit-outline"
+                name="alert-circle-outline"
                 size={18}
-                color="#FF3B30"
+                color="#FF9500"
                 style={styles.infoIcon}
               />
-              <View>
-                <Text style={styles.infoLabel}>Injury Level</Text>
-                <View
-                  style={[
-                    styles.injuryBadge,
-                    { backgroundColor: injuryBadge.bg, marginTop: 2 },
-                  ]}
-                >
-                  <Text
-                    style={[
-                      styles.injuryBadgeText,
-                      { color: injuryBadge.text },
-                    ]}
-                  >
-                    {injuryBadge.label}
-                  </Text>
-                </View>
+              <View style={{ flex: 1 }}>
+                <Text style={styles.infoLabel}>Incident</Text>
+                <Text style={styles.infoValue}>
+                  {incident.category || "Not specified"}
+                </Text>
               </View>
             </View>
+
+            {/* Only reports made before Incident replaced Injury Level have one. */}
+            {incident.injuryLevel ? (
+              <View style={styles.infoRow}>
+                <Ionicons
+                  name="medkit-outline"
+                  size={18}
+                  color="#FF3B30"
+                  style={styles.infoIcon}
+                />
+                <View>
+                  <Text style={styles.infoLabel}>Injury Level</Text>
+                  <View
+                    style={[
+                      styles.injuryBadge,
+                      { backgroundColor: injuryBadge.bg, marginTop: 2 },
+                    ]}
+                  >
+                    <Text
+                      style={[
+                        styles.injuryBadgeText,
+                        { color: injuryBadge.text },
+                      ]}
+                    >
+                      {injuryBadge.label}
+                    </Text>
+                  </View>
+                </View>
+              </View>
+            ) : null}
 
             <View style={styles.infoRow}>
               <Ionicons

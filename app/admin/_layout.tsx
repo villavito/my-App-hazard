@@ -83,6 +83,15 @@ export default function AdminLayout() {
 
   const mainNavItems: NavItem[] = [
     { icon: "grid-outline", label: "Dashboard", route: "/admin/dashboard" },
+    ...(isSuperAdmin
+      ? [
+          {
+            icon: "shield-outline" as const,
+            label: "Super Admin",
+            route: "/admin/super-admin",
+          },
+        ]
+      : []),
     {
       icon: "file-tray-full-outline",
       label: "Notifications",
@@ -119,11 +128,7 @@ export default function AdminLayout() {
       backgroundColor: isDark ? "#1a1a2e" : "#ffffff",
       borderBottomWidth: 1,
       borderBottomColor: isDark ? "#2a2a4e" : "#e0e0e0",
-      elevation: 4,
-      shadowColor: "#000",
-      shadowOffset: { width: 0, height: 2 },
-      shadowOpacity: 0.1,
-      shadowRadius: 4,
+      boxShadow: "0px 2px 4px rgba(0, 0, 0, 0.1)",
     },
     menuButton: {
       padding: 8,
@@ -195,11 +200,7 @@ export default function AdminLayout() {
       borderRadius: 12,
       padding: 8,
       minWidth: 200,
-      elevation: 8,
-      shadowColor: "#000",
-      shadowOffset: { width: 0, height: 4 },
-      shadowOpacity: 0.2,
-      shadowRadius: 8,
+      boxShadow: "0px 4px 8px rgba(0, 0, 0, 0.2)",
       borderWidth: 1,
       borderColor: isDark ? "#2a2a4e" : "#e0e0e0",
       zIndex: 999,
@@ -240,11 +241,7 @@ export default function AdminLayout() {
       width: SIDEBAR_WIDTH,
       backgroundColor: isDark ? "#12121f" : "#ffffff",
       zIndex: 101,
-      elevation: 16,
-      shadowColor: "#000",
-      shadowOffset: { width: 4, height: 0 },
-      shadowOpacity: 0.3,
-      shadowRadius: 12,
+      boxShadow: "4px 0px 12px rgba(0, 0, 0, 0.3)",
     },
     sidebarHeader: {
       padding: 20,

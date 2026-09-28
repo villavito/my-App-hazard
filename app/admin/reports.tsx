@@ -11,9 +11,8 @@ import {
   View,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { AGENCIES, AGENCY_COLORS } from '../../constants/agencies';
 import { useAuth } from '../../contexts/AuthContext';
-import { getAgencyIncidentCounts, getAllIncidents } from '../../services/firestoreService';
+import { getAllIncidents } from '../../services/firestoreService';
 
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
 const CHART_WIDTH = SCREEN_WIDTH - 64;
@@ -36,7 +35,6 @@ export default function ReportsAnalyticsScreen() {
   const router = useRouter();
   const { user, userRole } = useAuth();
   const [allIncidents, setAllIncidents] = useState<Incident[]>([]);
-  const [selectedTimeframe, setSelectedTimeframe] = useState('week');
   const [loading, setLoading] = useState(true);
 
   // A super admin reads across every agency; anyone else is limited to their own,
@@ -54,6 +52,17 @@ export default function ReportsAnalyticsScreen() {
 
   const loadData = async () => {
     setLoading(true);
+
+    // An admin with no agency assigned matches nothing rather than
+    // everything (see firestore.rules) - skip the query rather than firing
+    // an unscoped one, which the rules reject outright and would otherwise
+    // just silently leave this screen at zero with no error surfaced.
+    if (userRole?.role !== 'super_admin' && !userRole?.agency) {
+      setAllIncidents([]);
+      setLoading(false);
+      return;
+    }
+
     const result = await getAllIncidents(50, scopedAgency);
     if (result.success && result.data) {
       setAllIncidents(result.data as Incident[]);
@@ -66,14 +75,6 @@ export default function ReportsAnalyticsScreen() {
   const resolvedIncidents = allIncidents.filter(i => i.status === 'resolved').length;
   const pendingIncidents = allIncidents.filter(i => i.status === 'pending').length;
   const inProgressIncidents = allIncidents.filter(i => i.status === 'in_progress').length;
-
-  const agencyCounts: Record<string, number> = {};
-  allIncidents.forEach(i => {
-    const agency = i.agency || 'Unknown';
-    agencyCounts[agency] = (agencyCounts[agency] || 0) + 1;
-  });
-
-  const timeframeButtons = ['week', 'month', 'year', 'all'];
 
   const styles = StyleSheet.create({
     container: {
@@ -98,29 +99,6 @@ export default function ReportsAnalyticsScreen() {
       fontWeight: '700',
       color: isDark ? '#fff' : '#1a1a2e',
     },
-    // Timeframe Pills
-    timeframeRow: {
-      flexDirection: 'row',
-      gap: 8,
-      marginBottom: 20,
-    },
-    timeframePill: {
-      paddingVertical: 8,
-      paddingHorizontal: 16,
-      borderRadius: 20,
-      backgroundColor: isDark ? '#2a2a4e' : '#e0e0e0',
-    },
-    timeframePillActive: {
-      backgroundColor: '#007AFF',
-    },
-    timeframePillText: {
-      fontSize: 13,
-      fontWeight: '600',
-      color: isDark ? '#ccc' : '#666',
-    },
-    timeframePillTextActive: {
-      color: '#fff',
-    },
     // Stat Cards
     statsRow: {
       flexDirection: 'row',
@@ -133,11 +111,7 @@ export default function ReportsAnalyticsScreen() {
       backgroundColor: isDark ? '#1a1a2e' : '#ffffff',
       borderRadius: 16,
       padding: 16,
-      elevation: 2,
-      shadowColor: '#000',
-      shadowOffset: { width: 0, height: 1 },
-      shadowOpacity: 0.1,
-      shadowRadius: 4,
+      boxShadow: '0px 1px 4px rgba(0, 0, 0, 0.1)',
     },
     statCardHeader: {
       flexDirection: 'row',
@@ -173,182 +147,7 @@ export default function ReportsAnalyticsScreen() {
     statChangeNegative: {
       color: '#FF3B30',
     },
-    // Section
-    section: {
-      marginBottom: 24,
-    },
-    sectionTitle: {
-      fontSize: 18,
-      fontWeight: '700',
-      color: isDark ? '#fff' : '#1a1a2e',
-      marginBottom: 14,
-    },
-    // Bar Chart
-    chartCard: {
-      backgroundColor: isDark ? '#1a1a2e' : '#ffffff',
-      borderRadius: 16,
-      padding: 20,
-      elevation: 2,
-      shadowColor: '#000',
-      shadowOffset: { width: 0, height: 1 },
-      shadowOpacity: 0.1,
-      shadowRadius: 4,
-    },
-    chartTitle: {
-      fontSize: 16,
-      fontWeight: '600',
-      color: isDark ? '#fff' : '#333',
-      marginBottom: 16,
-    },
-    barRow: {
-      flexDirection: 'row',
-      alignItems: 'center',
-      marginBottom: 10,
-    },
-    barLabel: {
-      width: 80,
-      fontSize: 13,
-      fontWeight: '600',
-      color: isDark ? '#ccc' : '#555',
-    },
-    barTrack: {
-      flex: 1,
-      height: 24,
-      backgroundColor: isDark ? '#2a2a4e' : '#f0f0f5',
-      borderRadius: 12,
-      overflow: 'hidden',
-      position: 'relative',
-    },
-    barFill: {
-      height: '100%',
-      borderRadius: 12,
-      minWidth: 20,
-    },
-    barCount: {
-      position: 'absolute',
-      right: 8,
-      top: 3,
-      fontSize: 12,
-      fontWeight: '700',
-      color: isDark ? '#fff' : '#333',
-    },
-    // Pie Chart Placeholder
-    pieChartContainer: {
-      flexDirection: 'row',
-      alignItems: 'center',
-      justifyContent: 'center',
-      paddingVertical: 16,
-      gap: 24,
-    },
-    pieGraphic: {
-      width: 120,
-      height: 120,
-      borderRadius: 60,
-      backgroundColor: isDark ? '#2a2a4e' : '#f0f0f5',
-      alignItems: 'center',
-      justifyContent: 'center',
-      borderWidth: 8,
-      borderColor: '#007AFF',
-      position: 'relative',
-    },
-    pieGraphicText: {
-      fontSize: 24,
-      fontWeight: '800',
-      color: isDark ? '#fff' : '#333',
-    },
-    pieGraphicSubtext: {
-      fontSize: 10,
-      color: isDark ? '#888' : '#999',
-    },
-    pieLegend: {
-      flex: 1,
-    },
-    pieLegendItem: {
-      flexDirection: 'row',
-      alignItems: 'center',
-      marginBottom: 8,
-    },
-    pieLegendDot: {
-      width: 10,
-      height: 10,
-      borderRadius: 5,
-      marginRight: 8,
-    },
-    pieLegendLabel: {
-      flex: 1,
-      fontSize: 13,
-      color: isDark ? '#ccc' : '#555',
-    },
-    pieLegendCount: {
-      fontSize: 13,
-      fontWeight: '700',
-      color: isDark ? '#fff' : '#333',
-    },
   });
-
-  const renderBarChart = () => {
-    const maxCount = Math.max(...AGENCIES.map(a => agencyCounts[a] || 0), 1);
-    return (
-      <View style={styles.chartCard}>
-        <Text style={styles.chartTitle}>Incidents by Agency</Text>
-        {AGENCIES.map((agency) => {
-          const count = agencyCounts[agency] || 0;
-          const pct = (count / maxCount) * 100;
-          return (
-            <View key={agency} style={styles.barRow}>
-              <Text style={styles.barLabel}>{agency}</Text>
-              <View style={styles.barTrack}>
-                <View style={[styles.barFill, { width: `${pct}%`, backgroundColor: AGENCY_COLORS[agency] }]} />
-                <Text style={styles.barCount}>{count}</Text>
-              </View>
-            </View>
-          );
-        })}
-      </View>
-    );
-  };
-
-  const renderPieChart = () => {
-    const statusColors: Record<string, string> = {
-      pending: '#FF3B30',
-      in_progress: '#FF9500',
-      resolved: '#34C759',
-    };
-    const statusLabels: Record<string, string> = {
-      pending: 'Pending',
-      in_progress: 'In Progress',
-      resolved: 'Resolved',
-    };
-    const statuses = ['pending', 'in_progress', 'resolved'];
-    const total = resolvedIncidents + pendingIncidents + inProgressIncidents || 1;
-
-    return (
-      <View style={styles.chartCard}>
-        <Text style={styles.chartTitle}>Status Distribution</Text>
-        <View style={styles.pieChartContainer}>
-          <View style={[styles.pieGraphic, { borderColor: '#34C759' }]}>
-            <Text style={styles.pieGraphicText}>{Math.round((resolvedIncidents / total) * 100)}%</Text>
-            <Text style={styles.pieGraphicSubtext}>Resolved</Text>
-          </View>
-          <View style={styles.pieLegend}>
-            {statuses.map((status) => {
-              const count =
-                status === 'pending' ? pendingIncidents :
-                status === 'in_progress' ? inProgressIncidents :
-                resolvedIncidents;
-              return (
-                <View key={status} style={styles.pieLegendItem}>
-                  <View style={[styles.pieLegendDot, { backgroundColor: statusColors[status] }]} />
-                  <Text style={styles.pieLegendLabel}>{statusLabels[status]}</Text>
-                  <Text style={styles.pieLegendCount}>{count}</Text>
-                </View>
-              );
-            })}
-          </View>
-        </View>
-      </View>
-    );
-  };
 
   return (
     <SafeAreaView style={styles.container}>
@@ -359,21 +158,6 @@ export default function ReportsAnalyticsScreen() {
             <Ionicons name="arrow-back" size={24} color={isDark ? '#fff' : '#333'} />
           </TouchableOpacity>
           <Text style={styles.headerTitle}>Reports & Analytics</Text>
-        </View>
-
-        {/* Timeframe Filter */}
-        <View style={styles.timeframeRow}>
-          {timeframeButtons.map((tf) => (
-            <TouchableOpacity
-              key={tf}
-              style={[styles.timeframePill, selectedTimeframe === tf && styles.timeframePillActive]}
-              onPress={() => setSelectedTimeframe(tf)}
-            >
-              <Text style={[styles.timeframePillText, selectedTimeframe === tf && styles.timeframePillTextActive]}>
-                {tf.charAt(0).toUpperCase() + tf.slice(1)}
-              </Text>
-            </TouchableOpacity>
-          ))}
         </View>
 
         {/* Stats Overview */}
@@ -420,15 +204,6 @@ export default function ReportsAnalyticsScreen() {
           </View>
         </View>
 
-        {/* Bar Chart */}
-        <View style={styles.section}>
-          {renderBarChart()}
-        </View>
-
-        {/* Pie Chart */}
-        <View style={styles.section}>
-          {renderPieChart()}
-        </View>
       </ScrollView>
     </SafeAreaView>
   );

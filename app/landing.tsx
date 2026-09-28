@@ -1,36 +1,17 @@
-import { LinearGradient } from 'expo-linear-gradient';
 import { router } from 'expo-router';
 import { useEffect, useRef } from 'react';
-import { Animated, PanResponder, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import { Animated, PanResponder, Platform, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 
 export default function LandingScreen() {
-  const splashAnim = useRef(new Animated.Value(0)).current;
   const contentAnim = useRef(new Animated.Value(0)).current;
 
   useEffect(() => {
-    // Splash circle flourish
-    Animated.sequence([
-      Animated.timing(splashAnim, {
-        toValue: 1,
-        duration: 800,
-        useNativeDriver: true,
-      }),
-      Animated.timing(splashAnim, {
-        toValue: 0,
-        duration: 600,
-        useNativeDriver: true,
-      }),
-    ]).start();
-
-    // Reveal content on its own timer so a stalled splash animation
-    // (common with useNativeDriver timing on web) can't block it forever.
     Animated.timing(contentAnim, {
       toValue: 1,
       duration: 500,
-      delay: 1400,
       useNativeDriver: true,
     }).start();
-  }, []);
+  }, [contentAnim]);
 
   const panResponder = PanResponder.create({
     onMoveShouldSetPanResponder: (_, gestureState) => {
@@ -45,33 +26,8 @@ export default function LandingScreen() {
   });
 
   return (
-    <LinearGradient
-      colors={['#000000', '#092e6d', '#403673', '#ffffff']}
-      style={styles.gradient}
-      start={{ x: 0.5, y: 0 }}
-      end={{ x: 0.5, y: 1 }}
-    >
+    <View style={styles.gradient}>
     <Animated.View style={styles.container} {...panResponder.panHandlers}>
-      {/* Splash Effect */}
-      <Animated.View 
-        style={[
-          styles.splashOverlay,
-          {
-            opacity: splashAnim,
-            transform: [
-              {
-                scale: splashAnim.interpolate({
-                  inputRange: [0, 1],
-                  outputRange: [0.8, 1.2],
-                }),
-              },
-            ],
-          },
-        ]}
-      >
-        <Animated.View style={styles.splashCircle} />
-      </Animated.View>
-      
       {/* Content */}
       <Animated.View
         style={{
@@ -106,13 +62,14 @@ export default function LandingScreen() {
         </View>
       </Animated.View>
     </Animated.View>
-    </LinearGradient>
+    </View>
   );
 }
 
 const styles = StyleSheet.create({
   gradient: {
     flex: 1,
+    backgroundColor: '#092e6d',
   },
   container: {
     flex: 1,
@@ -128,9 +85,16 @@ const styles = StyleSheet.create({
     color: '#fff',
     marginBottom: 50,
     textAlign: 'center',
-    textShadowColor: 'rgba(0,0,0,0.3)',
-    textShadowOffset: { width: 1, height: 1 },
-    textShadowRadius: 2,
+    // react-native-web deprecated the textShadow* props in favour of the CSS
+    // shorthand, which native doesn't understand - so split by platform.
+    ...Platform.select({
+      web: { textShadow: '1px 1px 2px rgba(0,0,0,0.3)' },
+      default: {
+        textShadowColor: 'rgba(0,0,0,0.3)',
+        textShadowOffset: { width: 1, height: 1 },
+        textShadowRadius: 2,
+      },
+    }),
   },
   subtitle: {
     fontSize: 18,
@@ -149,11 +113,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: 40,
     paddingVertical: 15,
     borderRadius: 25,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.25,
-    shadowRadius: 4,
-    elevation: 5,
+    boxShadow: '0px 2px 4px rgba(0, 0, 0, 0.25)',
   },
   primaryButtonText: {
     color: '#fff',
@@ -179,29 +139,5 @@ const styles = StyleSheet.create({
     fontSize: 16,
     color: '#2563eb',
     textDecorationLine: 'underline',
-  },
-  splashOverlay: {
-    position: 'absolute',
-    top: 0,
-    left: 0,
-    right: 0,
-    bottom: 0,
-    justifyContent: 'center',
-    alignItems: 'center',
-    backgroundColor: 'rgba(37, 99, 235, 0.3)',
-    zIndex: 1,
-  },
-  splashCircle: {
-    width: 200,
-    height: 200,
-    borderRadius: 100,
-    backgroundColor: 'rgba(255, 255, 255, 0.2)',
-    borderWidth: 3,
-    borderColor: 'rgba(255, 255, 255, 0.4)',
-    shadowColor: '#fff',
-    shadowOffset: { width: 0, height: 0 },
-    shadowOpacity: 0.8,
-    shadowRadius: 20,
-    elevation: 10,
   },
 });

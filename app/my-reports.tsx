@@ -21,6 +21,7 @@ type MyIncident = {
   situation?: string;
   description?: string;
   injuryLevel?: string;
+  category?: string;
   location?: string;
   status?: string;
   involvedAgency?: string;
@@ -122,11 +123,7 @@ export default function MyReportsScreen() {
       borderRadius: 14,
       padding: 14,
       marginBottom: 12,
-      elevation: 2,
-      shadowColor: "#000",
-      shadowOffset: { width: 0, height: 1 },
-      shadowOpacity: 0.08,
-      shadowRadius: 4,
+      boxShadow: "0px 1px 4px rgba(0, 0, 0, 0.08)",
     },
     cardHeader: {
       flexDirection: "row",
@@ -182,7 +179,7 @@ export default function MyReportsScreen() {
     >
       <View style={styles.cardHeader}>
         <Text style={styles.cardTitle}>
-          {item.situation || item.description || "Incident Report"}
+          {item.category || item.situation || item.description || "Incident Report"}
         </Text>
         <View style={styles.badges}>
           {item.involvedAgency && (
@@ -200,7 +197,9 @@ export default function MyReportsScreen() {
           </View>
         </View>
       </View>
-      <Text style={styles.meta}>Injury: {item.injuryLevel || "Not specified"}</Text>
+      {item.injuryLevel ? (
+        <Text style={styles.meta}>Injury: {item.injuryLevel}</Text>
+      ) : null}
       <Text style={styles.meta}>Location: {item.location || "Not provided"}</Text>
       <Text style={styles.meta}>Submitted: {formatReportDate(item.createdAt)}</Text>
     </TouchableOpacity>

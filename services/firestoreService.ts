@@ -2,10 +2,12 @@ import {
   addDoc,
   collection,
   deleteDoc,
+  deleteField,
   doc,
   getDoc,
   getDocs,
   limit,
+  onSnapshot,
   orderBy,
   query,
   serverTimestamp,
@@ -172,6 +174,26 @@ export const getActiveAgencies = async (): Promise<Agency[]> => {
   }
 };
 
+// Live version of getActiveAgencies: calls `onChange` now and again whenever an
+// agency gains or loses its admin, so the report screen updates without the
+// citizen having to leave and reopen it. Returns the unsubscribe function.
+export const subscribeToActiveAgencies = (
+  onChange: (agencies: Agency[]) => void,
+) =>
+  onSnapshot(
+    query(collection(db, "agencies"), where("active", "==", true)),
+    (querySnapshot) => {
+      onChange(
+        querySnapshot.docs
+          .map((docSnap) => docSnap.id as Agency)
+          .filter((id) => (AGENCIES as readonly string[]).includes(id)),
+      );
+    },
+    (error) => {
+      console.error("Error listening to active agencies:", error);
+    },
+  );
+
 export const setAgencyActive = async (agency: Agency) => {
   // The `agency: Agency` type only holds at compile time - this value
   // actually comes from a Firestore user doc (an untyped cast), so a bad
@@ -194,6 +216,21 @@ export const setAgencyActive = async (agency: Agency) => {
     );
   } catch (error) {
     console.error("Error marking agency active:", error);
+  }
+};
+
+// Counterpart to setAgencyActive, for when an agency's last admin is demoted:
+// hides it from the report-incident screen so citizens can't send reports to
+// an inbox nobody is watching.
+export const setAgencyInactive = async (agency: Agency) => {
+  try {
+    await setDoc(
+      doc(db, "agencies", agency),
+      { active: false, updatedAt: serverTimestamp() },
+      { merge: true },
+    );
+  } catch (error) {
+    console.error("Error marking agency inactive:", error);
   }
 };
 
@@ -439,10 +476,20 @@ export const getAllUsers = async () => {
   }
 };
 
-export const updateUserRole = async (uid: string, role: string) => {
+// Only admins are scoped to an agency - any other role has the field removed,
+// so a demoted admin cannot keep reading that agency's inbox (see the
+// callerAgency() check in firestore.rules). Only super admins may write this.
+export const updateUserRole = async (
+  uid: string,
+  role: string,
+  agency?: Agency,
+) => {
   try {
     const userRef = doc(db, "users", uid);
-    await updateDoc(userRef, { role });
+    await updateDoc(userRef, {
+      role,
+      agency: role === "admin" && agency ? agency : deleteField(),
+    });
     return { success: true };
   } catch (error) {
     console.error("Error updating user role:", error);

@@ -1,42 +1,34 @@
-import { LinearGradient } from 'expo-linear-gradient';
-import { Stack } from 'expo-router';
-import { StatusBar } from 'expo-status-bar';
-import { StyleSheet, View } from 'react-native';
-import { SafeAreaProvider } from 'react-native-safe-area-context';
-import { AuthProvider } from '../contexts/AuthContext';
+import { Stack } from "expo-router";
+import { StatusBar } from "expo-status-bar";
+import { StyleSheet, View } from "react-native";
+import { SafeAreaProvider } from "react-native-safe-area-context";
+import { AuthProvider } from "../contexts/AuthContext";
 
 export default function RootLayout() {
-
   return (
     <SafeAreaProvider>
       <AuthProvider>
-        <StatusBar style="light" />
-        <LinearGradient
-          colors={['#000000', '#092e6d', '#403673', '#ffffff']}
-          style={styles.background}
-          start={{ x: 0, y: 0 }}
-          end={{ x: 1, y: 1 }}
-        >
-          <View style={styles.overlay}>
-            <Stack
-              screenOptions={{
-                headerShown: false,
-                contentStyle: { backgroundColor: 'transparent' },
-                animation: 'fade',
-                gestureEnabled: true,
-              }}
-            />
-          </View>
-        </LinearGradient>
+        {/* "auto" picks status bar icon color from the OS color scheme -
+            screens vary between light and dark backgrounds by theme now that
+            the app-wide dark gradient background is gone, so a single fixed
+            "light" style would go invisible (white-on-white) in light mode. */}
+        <StatusBar style="auto" />
+        <View style={styles.overlay}>
+          <Stack
+            screenOptions={{
+              headerShown: false,
+              contentStyle: { backgroundColor: "transparent" },
+              animation: "fade",
+              gestureEnabled: true,
+            }}
+          />
+        </View>
       </AuthProvider>
     </SafeAreaProvider>
   );
 }
 
 const styles = StyleSheet.create({
-  background: {
-    ...StyleSheet.absoluteFillObject,
-  },
   overlay: {
     flex: 1,
   },
