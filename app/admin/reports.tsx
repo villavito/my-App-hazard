@@ -41,8 +41,11 @@ export default function ReportsScreen() {
   const colorScheme = useColorScheme();
   const isDark = colorScheme === "dark";
   const router = useRouter();
-  const { user, userRole } = useAuth();
+  const { user, userRole, loading: authLoading } = useAuth();
   const isSuperAdmin = userRole?.role === "super_admin";
+  const canViewReports = Boolean(
+    user && userRole && (isSuperAdmin || userRole.agency),
+  );
 
   const [period, setPeriod] = useState<ReportPeriodKey>("thisMonth");
   // Only a super admin can pick; everyone else is locked to their agency,
@@ -53,10 +56,16 @@ export default function ReportsScreen() {
       ? undefined
       : agencyFilter
     : userRole?.agency;
+  const requestKey = useMemo(
+    () => JSON.stringify([user?.uid ?? null, scopedAgency ?? null, period]),
+    [period, scopedAgency, user?.uid],
+  );
 
   const [incidents, setIncidents] = useState<ReportIncident[]>([]);
   const [previousTotal, setPreviousTotal] = useState(0);
-  const [loading, setLoading] = useState(true);
+  const [loadedRequestKey, setLoadedRequestKey] = useState<string | null>(null);
+  const loading =
+    authLoading || (canViewReports && loadedRequestKey !== requestKey);
   const [loadError, setLoadError] = useState<string | null>(null);
   const [exporting, setExporting] = useState<"pdf" | "xlsx" | null>(null);
 
@@ -65,47 +74,67 @@ export default function ReportsScreen() {
   useEffect(() => {
     // Firestore rules need request.auth populated, and the scope depends on the
     // role, so wait until the session has resolved before querying.
-    if (!user || !userRole) return;
-
-    // An admin with no agency assigned matches nothing rather than everything
-    // (see firestore.rules), so there is nothing to query.
-    if (!isSuperAdmin && !userRole.agency) {
-      setIncidents([]);
-      setPreviousTotal(0);
-      setLoading(false);
-      return;
-    }
+    if (authLoading || !canViewReports) return;
 
     let cancelled = false;
-    setLoading(true);
-    setLoadError(null);
-    Promise.all([
-      getIncidentsInRange(
-        ranges.current.start,
-        ranges.current.end,
-        scopedAgency,
-      ),
-      countIncidentsInRange(
-        ranges.previous.start,
-        ranges.previous.end,
-        scopedAgency,
-      ),
-    ]).then(([current, previous]) => {
-      if (cancelled) return;
-      if (current.success && current.data) {
+    const loadReports = async () => {
+      try {
+        const [current, previous] = await Promise.all([
+          getIncidentsInRange(
+            ranges.current.start,
+            ranges.current.end,
+            scopedAgency,
+          ),
+          countIncidentsInRange(
+            ranges.previous.start,
+            ranges.previous.end,
+            scopedAgency,
+          ),
+        ]);
+        if (cancelled) return;
+        if (
+          !current.success ||
+          !current.data ||
+          !previous.success ||
+          typeof previous.data !== "number"
+        ) {
+          const error = !current.success
+            ? current.error
+            : !previous.success
+              ? previous.error
+              : new Error("Report query returned incomplete data.");
+          console.error("Error loading report data:", error);
+          setIncidents([]);
+          setPreviousTotal(0);
+          setLoadError("Couldn't load reports for this period.");
+          return;
+        }
         setIncidents(current.data as ReportIncident[]);
-      } else {
+        setPreviousTotal(previous.data);
+        setLoadError(null);
+      } catch (error) {
+        if (cancelled) return;
+        console.error("Error loading report data:", error);
         setIncidents([]);
-        setLoadError("Couldn't load incidents for this period.");
+        setPreviousTotal(0);
+        setLoadError("Couldn't load reports for this period.");
+      } finally {
+        if (!cancelled) setLoadedRequestKey(requestKey);
       }
-      setPreviousTotal(previous.success ? (previous.data ?? 0) : 0);
-      setLoading(false);
-    });
+    };
+    void loadReports();
     // A newer filter selection supersedes an in-flight load.
     return () => {
       cancelled = true;
     };
-  }, [user, userRole, isSuperAdmin, scopedAgency, ranges]);
+  }, [
+    authLoading,
+    canViewReports,
+    isSuperAdmin,
+    requestKey,
+    scopedAgency,
+    ranges,
+  ]);
 
   const summary = useMemo(
     () => summarizeIncidents(incidents, previousTotal),
@@ -415,20 +444,24 @@ export default function ReportsScreen() {
           {formatRange(ranges.current)} · {scopeLabel}
         </Text>
 
-        {loading ? (
+        {authLoading || (canViewReports && loading) ? (
           <View style={styles.centered}>
             <ActivityIndicator size="large" color="#007AFF" />
           </View>
-        ) : loadError ? (
+        ) : !user ? (
           <View style={styles.centered}>
-            <Text style={styles.emptyText}>{loadError}</Text>
+            <Text style={styles.emptyText}>Sign in to view reports.</Text>
           </View>
-        ) : !isSuperAdmin && !userRole?.agency ? (
+        ) : !canViewReports ? (
           <View style={styles.centered}>
             <Text style={styles.emptyText}>
               Your account has no agency assigned yet, so there are no reports
               to show.
             </Text>
+          </View>
+        ) : loadError ? (
+          <View style={styles.centered}>
+            <Text style={styles.emptyText}>{loadError}</Text>
           </View>
         ) : (
           <>
