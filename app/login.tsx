@@ -35,7 +35,8 @@ export default function LoginScreen() {
   const [loading, setLoading] = useState(false);
   const [googleLoading, setGoogleLoading] = useState(false);
   const router = useRouter();
-  const { user, loading: authLoading, refreshUserRole } = useAuth();
+  const { refreshUserRole } = useAuth();
+  const isExpoGo = Constants.appOwnership === AppOwnership.Expo;
   const [googleRequest, googleResponse, promptGoogleSignIn] =
     Google.useIdTokenAuthRequest({
       iosClientId:
@@ -47,6 +48,7 @@ export default function LoginScreen() {
       webClientId:
         process.env.EXPO_PUBLIC_GOOGLE_WEB_CLIENT_ID ??
         "web-client-id-not-configured",
+      selectAccount: true,
     }, {
       native: "incident-reporting-app:/oauthredirect",
       scheme: "incident-reporting-app",
@@ -57,9 +59,7 @@ export default function LoginScreen() {
       : Platform.OS === "android"
         ? Boolean(process.env.EXPO_PUBLIC_GOOGLE_ANDROID_CLIENT_ID)
         : Boolean(process.env.EXPO_PUBLIC_GOOGLE_WEB_CLIENT_ID);
-  const isExpoGo = Constants.appOwnership === AppOwnership.Expo;
   const handledGoogleResponse = useRef<object | null>(null);
-  const autoPromptStarted = useRef(false);
 
   const styles = StyleSheet.create({
     container: {
@@ -239,35 +239,6 @@ export default function LoginScreen() {
   }, [promptGoogleSignIn]);
 
   useEffect(() => {
-    if (
-      Platform.OS === "web" ||
-      isExpoGo ||
-      authLoading ||
-      user ||
-      !hasGoogleClientId ||
-      !googleRequest ||
-      autoPromptStarted.current
-    ) {
-      return;
-    }
-
-    const timer = setTimeout(() => {
-      if (autoPromptStarted.current) return;
-      autoPromptStarted.current = true;
-      void startGoogleSignIn();
-    }, 0);
-
-    return () => clearTimeout(timer);
-  }, [
-    authLoading,
-    googleRequest,
-    hasGoogleClientId,
-    isExpoGo,
-    startGoogleSignIn,
-    user,
-  ]);
-
-  useEffect(() => {
     if (!googleResponse || handledGoogleResponse.current === googleResponse) {
       return;
     }
@@ -336,7 +307,7 @@ export default function LoginScreen() {
     if (isExpoGo) {
       showAlert(
         "Development Build Required",
-        "Google sign-in can't return to the app from Expo Go. Run this app in a development build instead.",
+        "Google sign-in on mobile requires this app's development or production build. Expo Go cannot use this app's Android/iOS OAuth client securely.",
       );
       return;
     }
@@ -495,8 +466,8 @@ export default function LoginScreen() {
         </TouchableOpacity>
         {Platform.OS !== "web" && isExpoGo ? (
           <Text style={styles.googleSetupText}>
-            Google sign-in requires a development build; it cannot complete its
-            OAuth redirect in Expo Go.
+            Google sign-in requires the app&apos;s development or production
+            build; it is not supported in Expo Go.
           </Text>
         ) : Platform.OS !== "web" && !hasGoogleClientId ? (
           <Text style={styles.googleSetupText}>
