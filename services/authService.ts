@@ -1,11 +1,16 @@
 import {
+  GoogleAuthProvider,
   createUserWithEmailAndPassword,
+  signInWithCredential,
   signInWithEmailAndPassword,
+  signInWithPopup,
   signOut,
   updateProfile,
+  type User,
 } from "firebase/auth";
 import {
   doc,
+  enableNetwork,
   getDocFromServer,
   serverTimestamp,
   setDoc,
@@ -15,6 +20,32 @@ import { db, getAuthInstance } from "../config/firebase";
 import { inferAgencyFromEmail, type Agency } from "../constants/agencies";
 import { setAgencyActive } from "./firestoreService";
 
+// Waits between attempts to read the user doc: ~7.5s in total.
+const SERVER_READ_RETRY_DELAYS_MS = [500, 1000, 2000, 4000];
+
+// getDocFromServer fails straight away with "client is offline"
+// (code "unavailable") whenever Firestore hasn't (re)connected yet - e.g. just
+// after the app opens or returns from the background, even on a working
+// connection, since the long-polling transport takes a moment to come up.
+// Retry a few times, nudging the network back on, before giving up. Still
+// server-only: the role/agency must never come from a stale local cache.
+async function getUserDocFromServer(uid: string) {
+  const ref = doc(db, "users", uid);
+  for (let attempt = 0; ; attempt++) {
+    try {
+      return await getDocFromServer(ref);
+    } catch (error: any) {
+      const delay = SERVER_READ_RETRY_DELAYS_MS[attempt];
+      if (error?.code !== "unavailable" || delay === undefined) throw error;
+      console.warn(
+        `Firestore offline reading user ${uid}, retrying in ${delay}ms...`,
+      );
+      await enableNetwork(db).catch(() => {});
+      await new Promise((resolve) => setTimeout(resolve, delay));
+    }
+  }
+}
+
 export interface UserRole {
   uid: string;
   email: string;
@@ -22,6 +53,9 @@ export interface UserRole {
   role: "user" | "admin" | "super_admin";
   // Which agency's inbox this admin can see. Unset (e.g. for super_admin) means no agency is restricted.
   agency?: Agency;
+  // Philippine mobile number in +639XXXXXXXXX form, so responders can call
+  // the reporter back. Missing on accounts created before it was collected.
+  phoneNumber?: string;
   createdAt: any;
   lastLogin: any;
 }
@@ -47,13 +81,78 @@ export const friendlyAuthError = (
       return "Too many attempts. Please wait a moment and try again.";
     case "auth/network-request-failed":
       return "Network error. Check your connection and try again.";
+    case "auth/account-exists-with-different-credential":
+      return "An account already exists with this email. Sign in using its existing method.";
+    // Firestore still offline after the retries above.
+    case "unavailable":
+      return "Can't reach the server. Check your internet connection and try again.";
     case "auth/email-already-in-use":
       return "An account with this email already exists.";
     case "auth/weak-password":
-      return "Password is too weak. Use at least 6 characters.";
+      return "Password is too weak. Use at least 8 characters with an uppercase letter, a lowercase letter, and a number.";
     default:
       return fallback;
   }
+};
+
+const syncUserRole = async (
+  user: User,
+  createIfMissing = false,
+): Promise<
+  | { success: true; user: UserRole }
+  | { success: false; error: string }
+> => {
+  const userDoc = await getUserDocFromServer(user.uid);
+  let userData: UserRole;
+
+  if (userDoc.exists()) {
+    userData = userDoc.data() as UserRole;
+    await setDoc(
+      doc(db, "users", user.uid),
+      { ...userData, lastLogin: serverTimestamp() },
+      { merge: true },
+    );
+  } else {
+    if (!createIfMissing || !user.email) {
+      return { success: false, error: "User role not found" };
+    }
+
+    const email = user.email;
+    const role: UserRole["role"] = email.toLowerCase().endsWith("@superadmin.com")
+      ? "super_admin"
+      : email.toLowerCase().endsWith("@admin.com")
+        ? "admin"
+        : "user";
+    const agency = role === "admin" ? inferAgencyFromEmail(email) : undefined;
+    userData = {
+      uid: user.uid,
+      email,
+      displayName: user.displayName || email.split("@")[0],
+      role,
+      ...(agency ? { agency } : {}),
+      createdAt: serverTimestamp(),
+      lastLogin: serverTimestamp(),
+    };
+    await setDoc(doc(db, "users", user.uid), userData);
+  }
+
+  if (userData.role === "admin" && !userData.agency) {
+    const inferred = inferAgencyFromEmail(userData.email ?? user.email ?? "");
+    if (inferred) {
+      try {
+        await updateDoc(doc(db, "users", user.uid), { agency: inferred });
+        userData.agency = inferred;
+      } catch (error) {
+        console.warn("Could not assign agency from email:", error);
+      }
+    }
+  }
+
+  if (userData.role === "admin" && userData.agency) {
+    await setAgencyActive(userData.agency);
+  }
+
+  return { success: true, user: userData };
 };
 
 // Create user with role
@@ -63,6 +162,7 @@ export const createUserWithRole = async (
   displayName: string,
   role: "user" | "admin" | "super_admin" = "user",
   agency?: Agency,
+  phoneNumber?: string,
 ) => {
   try {
     const auth = getAuthInstance();
@@ -82,6 +182,7 @@ export const createUserWithRole = async (
       displayName,
       role,
       ...(agency ? { agency } : {}),
+      ...(phoneNumber ? { phoneNumber } : {}),
       createdAt: serverTimestamp(),
       lastLogin: serverTimestamp(),
     };
@@ -115,61 +216,50 @@ export const signInUser = async (email: string, password: string) => {
       email,
       password,
     );
-    const user = userCredential.user;
-
-    // Get user role from Firestore
-    // getDocFromServer (not getDoc) so a stale local cache from before an
-    // out-of-band Firestore edit can never be served here - this value drives
-    // which agency inbox the admin sees, so it must always be current.
-    const userDoc = await getDocFromServer(doc(db, "users", user.uid));
-    if (userDoc.exists()) {
-      const userData = userDoc.data() as UserRole;
-
-      // Update last login
-      await setDoc(
-        doc(db, "users", user.uid),
-        {
-          ...userData,
-          lastLogin: serverTimestamp(),
-        },
-        { merge: true },
-      );
-
-      // An admin that signed up before agencies were read from the email has
-      // none - fill it in from the address now. Its own write, separate from
-      // the lastLogin one above, because firestore.rules only allows this
-      // one-time, email-matching agency change, and a rejection here (e.g.
-      // rules not yet deployed) must not fail the whole login.
-      if (userData.role === "admin" && !userData.agency) {
-        const inferred = inferAgencyFromEmail(userData.email ?? email);
-        if (inferred) {
-          try {
-            await updateDoc(doc(db, "users", user.uid), { agency: inferred });
-            userData.agency = inferred;
-          } catch (error) {
-            console.warn("Could not assign agency from email:", error);
-          }
-        }
-      }
-
-      // Re-assert this admin's agency on every sign-in. Accounts created before
-      // the agencies collection existed never registered themselves, so their
-      // agency stays missing from the report screen's dropdown. Doing it here
-      // lets those accounts self-heal just by logging in.
-      if (userData.role === "admin" && userData.agency) {
-        await setAgencyActive(userData.agency);
-      }
-
-      return { success: true, user: userData };
-    } else {
-      return { success: false, error: "User role not found" };
-    }
+    return await syncUserRole(userCredential.user);
   } catch (error: any) {
     // `error` is the user-facing message; `code` is the raw Firebase code, kept
     // for callers that want to branch on it (e.g. network failure vs bad login).
     return {
-      success: false,
+      success: false as const,
       error: friendlyAuthError(error.code, "Login failed. Please try again."),
+      code: error.code,
+    };
+  }
+};
+
+export const signInWithGoogleToken = async (idToken: string) => {
+  try {
+    const auth = getAuthInstance();
+    const credential = GoogleAuthProvider.credential(idToken);
+    const userCredential = await signInWithCredential(auth, credential);
+    return await syncUserRole(userCredential.user, true);
+  } catch (error: any) {
+    return {
+      success: false as const,
+      error: friendlyAuthError(
+        error.code,
+        "Google sign-in failed. Please try again.",
+      ),
+      code: error.code,
+    };
+  }
+};
+
+export const signInWithGooglePopup = async () => {
+  try {
+    const auth = getAuthInstance();
+    const provider = new GoogleAuthProvider();
+    provider.setCustomParameters({ prompt: "select_account" });
+    const userCredential = await signInWithPopup(auth, provider);
+    return await syncUserRole(userCredential.user, true);
+  } catch (error: any) {
+    return {
+      success: false as const,
+      error: friendlyAuthError(
+        error.code,
+        "Google sign-in failed. Please try again.",
+      ),
       code: error.code,
     };
   }
@@ -190,7 +280,7 @@ export const getUserRole = async (uid: string): Promise<UserRole | null> => {
   try {
     // getDocFromServer - see the comment in signInUser for why this must
     // never be served from a stale local cache.
-    const userDoc = await getDocFromServer(doc(db, "users", uid));
+    const userDoc = await getUserDocFromServer(uid);
     if (userDoc.exists()) {
       return userDoc.data() as UserRole;
     }

@@ -9,7 +9,11 @@ import {
   // @ts-expect-error not present in @firebase/auth's default (non-RN) type declarations
   getReactNativePersistence,
 } from "@firebase/auth";
-import { getFirestore } from "firebase/firestore";
+import {
+  getFirestore,
+  initializeFirestore,
+  type Firestore,
+} from "firebase/firestore";
 
 const firebaseConfig = {
   apiKey: "AIzaSyCJgfoIbGkAKTya1MX7ho670fi-fFbFVlo",
@@ -56,6 +60,21 @@ if (typeof window !== "undefined" && typeof document !== "undefined") {
   }
 }
 
-export const db = getFirestore(app);
+// React Native can't hold Firestore's default WebChannel streaming connection
+// open ("WebChannelConnection RPC 'Listen' stream ... transport errored"), which
+// leaves the client stuck "offline" and makes getDocFromServer fail. Force
+// long-polling on native; web keeps the default transport.
+let firestore: Firestore;
+if (Platform.OS === "web") {
+  firestore = getFirestore(app);
+} else {
+  try {
+    firestore = initializeFirestore(app, { experimentalForceLongPolling: true });
+  } catch {
+    // Already initialized (e.g. Fast Refresh re-running this module).
+    firestore = getFirestore(app);
+  }
+}
+export const db = firestore;
 
 export default app;

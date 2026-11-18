@@ -54,3 +54,37 @@ export const API_BASE_URL_CANDIDATES = [
 // the whole reason it exists - see the comment on TUNNEL_URL), whereas a
 // LAN guess can silently fail on an isolated Wi-Fi/hotspot with no fallback.
 export const API_BASE_URL = TUNNEL_URL || API_BASE_URL_CANDIDATES[0];
+
+const BACKEND_TIMEOUT_MS = 20000;
+
+// POSTs JSON to the backend, trying each candidate address in turn until one
+// answers - a single fixed URL broke whenever the temporary tunnel died or
+// the phone was on a different network. Only a failure to *connect* moves on
+// to the next address; any HTTP response (even an error status) is returned
+// as-is, so a request is never sent twice to a server that received it.
+export async function postToBackend(
+  path: string,
+  body: unknown,
+): Promise<{ ok: boolean; data: any }> {
+  let lastError: unknown;
+  for (const baseUrl of API_BASE_URL_CANDIDATES) {
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), BACKEND_TIMEOUT_MS);
+    try {
+      const response = await fetch(`${baseUrl}${path}`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(body),
+        signal: controller.signal,
+      });
+      const data = await response.json().catch(() => ({}));
+      return { ok: response.ok, data };
+    } catch (error) {
+      lastError = error;
+      console.warn(`Backend unreachable at ${baseUrl}, trying next...`);
+    } finally {
+      clearTimeout(timeoutId);
+    }
+  }
+  throw lastError ?? new Error('No backend address configured');
+}

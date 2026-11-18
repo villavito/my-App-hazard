@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import {
   ActivityIndicator,
   FlatList,
+  Modal,
   StyleSheet,
   Text,
   TouchableOpacity,
@@ -12,6 +13,7 @@ import {
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { AGENCY_COLORS } from "../constants/agencies";
+import { IncidentVideoPlayer } from "../components/IncidentVideoPlayer";
 import { useAuth } from "../contexts/AuthContext";
 import { deleteIncidentReport, getUserIncidents } from "../services/firestoreService";
 import { showAlert } from "../utils/crossPlatformAlert";
@@ -25,6 +27,7 @@ type MyIncident = {
   location?: string;
   status?: string;
   involvedAgency?: string;
+  videoUrl?: string;
   createdAt?: { toDate: () => Date };
 };
 
@@ -46,6 +49,7 @@ export default function MyReportsScreen() {
   const { user } = useAuth();
   const [reports, setReports] = useState<MyIncident[]>([]);
   const [loading, setLoading] = useState(true);
+  const [selectedVideoUrl, setSelectedVideoUrl] = useState<string | null>(null);
 
   useEffect(() => {
     if (!user) {
@@ -169,6 +173,38 @@ export default function MyReportsScreen() {
       color: isDark ? "#888" : "#666",
       marginTop: 2,
     },
+    videoButton: {
+      flexDirection: "row",
+      alignItems: "center",
+      alignSelf: "flex-start",
+      gap: 6,
+      marginTop: 10,
+      paddingVertical: 8,
+      paddingHorizontal: 10,
+      borderRadius: 8,
+      backgroundColor: isDark ? "#2a2a4e" : "#e8f0fe",
+    },
+    videoButtonText: {
+      color: "#007AFF",
+      fontSize: 13,
+      fontWeight: "600",
+    },
+    videoModal: {
+      flex: 1,
+      justifyContent: "center",
+      padding: 16,
+      backgroundColor: "rgba(0,0,0,0.9)",
+    },
+    videoModalClose: {
+      alignSelf: "flex-end",
+      padding: 10,
+      marginBottom: 8,
+    },
+    videoPlayer: {
+      width: "100%",
+      aspectRatio: 16 / 9,
+      backgroundColor: "#000",
+    },
   });
 
   const renderItem = ({ item }: { item: MyIncident }) => (
@@ -202,6 +238,17 @@ export default function MyReportsScreen() {
       ) : null}
       <Text style={styles.meta}>Location: {item.location || "Not provided"}</Text>
       <Text style={styles.meta}>Submitted: {formatReportDate(item.createdAt)}</Text>
+      {item.videoUrl ? (
+        <TouchableOpacity
+          style={styles.videoButton}
+          onPress={() => setSelectedVideoUrl(item.videoUrl ?? null)}
+          accessibilityRole="button"
+          accessibilityLabel="Preview incident video"
+        >
+          <Ionicons name="play-circle-outline" size={18} color="#007AFF" />
+          <Text style={styles.videoButtonText}>Preview video</Text>
+        </TouchableOpacity>
+      ) : null}
     </TouchableOpacity>
   );
 
@@ -233,6 +280,30 @@ export default function MyReportsScreen() {
           }
         />
       )}
+      <Modal
+        visible={selectedVideoUrl !== null}
+        animationType="fade"
+        transparent
+        onRequestClose={() => setSelectedVideoUrl(null)}
+      >
+        <View style={styles.videoModal}>
+          <TouchableOpacity
+            style={styles.videoModalClose}
+            onPress={() => setSelectedVideoUrl(null)}
+            accessibilityRole="button"
+            accessibilityLabel="Close video preview"
+          >
+            <Ionicons name="close" size={28} color="#fff" />
+          </TouchableOpacity>
+          {selectedVideoUrl ? (
+            <IncidentVideoPlayer
+              uri={selectedVideoUrl}
+              style={styles.videoPlayer}
+              contentFit="contain"
+            />
+          ) : null}
+        </View>
+      </Modal>
     </SafeAreaView>
   );
 }

@@ -11,8 +11,34 @@
 
 1. In Firebase Console, go to "Authentication"
 2. Click "Get Started"
-3. Enable "Email/Password" sign-in method
+3. Enable "Email/Password" and "Google" sign-in methods
 4. Save your settings
+
+For Google sign-in, create OAuth client IDs in the Google Cloud project linked
+to Firebase:
+
+- Android: use package name `com.villavito.incidentreportingapp` and add the
+  app's signing certificate SHA-1 fingerprints.
+- iOS: use bundle ID `com.villavito.incidentreportingapp`.
+- Web: add the app's web origin to Firebase Authentication's authorized
+  domains, and add the browser origin and AuthSession redirect URL to the web
+  OAuth client's authorized origins and redirect URIs.
+
+Put the resulting client IDs in the project-root `.env.local` file:
+
+```dotenv
+EXPO_PUBLIC_GOOGLE_ANDROID_CLIENT_ID=your-android-client-id
+EXPO_PUBLIC_GOOGLE_IOS_CLIENT_ID=your-ios-client-id
+EXPO_PUBLIC_GOOGLE_WEB_CLIENT_ID=your-web-client-id
+```
+
+These are public OAuth client IDs, not client secrets. Restart Expo after
+changing them. Native Google sign-in requires a development or production
+build configured with the matching package/bundle ID and signing credentials.
+Expo Go cannot complete this OAuth redirect; use `npx expo run:android` or
+`npx expo run:ios` to build and install a development app instead. For Android,
+register the development build's SHA-1 signing fingerprint with its Android
+OAuth client in Firebase/Google Cloud before testing.
 
 ## 3. Setup Firestore Database
 

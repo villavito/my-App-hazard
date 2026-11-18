@@ -1,24 +1,42 @@
-import { Ionicons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
-import { doc, updateDoc } from 'firebase/firestore';
+import { deleteField, doc, updateDoc } from 'firebase/firestore';
 import { useEffect, useState } from 'react';
-import { StyleSheet, Text, TextInput, TouchableOpacity, useColorScheme, View } from 'react-native';
+import { ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, useColorScheme, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { db } from '../config/firebase';
 import { useAuth } from '../contexts/AuthContext';
 import { showAlert } from '../utils/crossPlatformAlert';
+import {
+  formatMobile,
+  isValidMobile,
+  mobileDigits,
+  mobileErrorMessage,
+  toE164Mobile,
+} from '../utils/phoneNumber';
 
 export default function ProfileScreen() {
   const colorScheme = useColorScheme();
   const isDark = colorScheme === 'dark';
   const router = useRouter();
-  const { user, userRole } = useAuth();
+  const { user, userRole, refreshUserRole } = useAuth();
   const [displayName, setDisplayName] = useState(userRole?.displayName || '');
+  // Just the 10 digits after +63; empty for accounts made before signup
+  // asked for a number.
+  const [mobile, setMobile] = useState(mobileDigits(userRole?.phoneNumber || ''));
+  const [mobileTouched, setMobileTouched] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
 
   useEffect(() => {
     setDisplayName(userRole?.displayName || '');
+    setMobile(mobileDigits(userRole?.phoneNumber || ''));
   }, [userRole]);
+
+  // The number is optional here (older accounts may not have one yet), but
+  // if anything is typed it must be a complete, valid mobile number.
+  const mobileValid = isValidMobile(mobile);
+  const mobileOk = mobile.length === 0 || mobileValid;
+  const showMobileError = mobileTouched && mobile.length > 0 && !mobileValid;
+  const canSave = displayName.trim().length > 0 && mobileOk && !isLoading;
 
   const styles = StyleSheet.create({
     container: {
@@ -130,6 +148,44 @@ export default function ProfileScreen() {
       color: isDark ? '#fff' : '#000',
       fontWeight: '500',
     },
+    phoneInputRow: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      backgroundColor: isDark ? '#3a3a3a' : '#fff',
+      borderWidth: 1,
+      borderColor: isDark ? '#4a4a4a' : '#dee2e6',
+      borderRadius: 8,
+    },
+    phonePrefix: {
+      paddingHorizontal: 12,
+      paddingVertical: 12,
+      borderRightWidth: 1,
+      borderRightColor: isDark ? '#4a4a4a' : '#dee2e6',
+    },
+    phonePrefixText: {
+      fontSize: 16,
+      fontWeight: '600',
+      color: isDark ? '#fff' : '#000',
+    },
+    phoneInput: {
+      flex: 1,
+      padding: 12,
+      fontSize: 16,
+      color: isDark ? '#fff' : '#000',
+    },
+    inputInvalid: {
+      borderColor: '#FF3B30',
+    },
+    helperText: {
+      fontSize: 13,
+      marginTop: 6,
+      color: isDark ? '#aaa' : '#666',
+    },
+    errorText: {
+      fontSize: 13,
+      marginTop: 6,
+      color: '#FF3B30',
+    },
   });
 
   const handleSaveProfile = async () => {
@@ -138,11 +194,21 @@ export default function ProfileScreen() {
       return;
     }
 
+    if (!mobileOk) {
+      setMobileTouched(true);
+      showAlert('Invalid Mobile Number', mobileErrorMessage(mobile));
+      return;
+    }
+
     setIsLoading(true);
     try {
       await updateDoc(doc(db, 'users', user.uid), {
         displayName: displayName.trim(),
+        // Clearing the field removes the saved number.
+        phoneNumber: mobileValid ? toE164Mobile(mobile) : deleteField(),
       });
+      // Pull the saved values back into the app so other screens show them.
+      await refreshUserRole();
 
       showAlert('Success', 'Profile updated successfully!');
       router.back();
@@ -169,7 +235,11 @@ export default function ProfileScreen() {
         <Text style={styles.headerTitle}>Profile</Text>
       </View>
 
-      <View style={styles.content}>
+      <ScrollView
+        style={styles.content}
+        contentContainerStyle={{ paddingBottom: 40 }}
+        keyboardShouldPersistTaps="handled"
+      >
         <View style={styles.profileSection}>
           <View style={styles.profileHeader}>
             <View style={styles.avatar}>
@@ -193,6 +263,41 @@ export default function ProfileScreen() {
           />
         </View>
 
+        <View style={styles.inputGroup}>
+          <Text style={styles.label}>Mobile Number</Text>
+          <View
+            style={[
+              styles.phoneInputRow,
+              showMobileError && styles.inputInvalid,
+            ]}
+          >
+            <View style={styles.phonePrefix}>
+              <Text style={styles.phonePrefixText}>🇵🇭 +63</Text>
+            </View>
+            <TextInput
+              style={styles.phoneInput}
+              value={formatMobile(mobile)}
+              onChangeText={(text) => setMobile(mobileDigits(text))}
+              onBlur={() => setMobileTouched(true)}
+              placeholder="917 123 4567"
+              placeholderTextColor={isDark ? '#888' : '#999'}
+              keyboardType="phone-pad"
+              autoComplete="tel"
+              textContentType="telephoneNumber"
+              maxLength={14}
+            />
+          </View>
+          {showMobileError ? (
+            <Text style={styles.errorText}>{mobileErrorMessage(mobile)}</Text>
+          ) : (
+            <Text style={styles.helperText}>
+              {userRole?.phoneNumber
+                ? 'Responders may call this number about your reports.'
+                : 'Add your number so responders can call you about your reports.'}
+            </Text>
+          )}
+        </View>
+
         <View style={styles.infoCard}>
           <View style={styles.infoRow}>
             <Text style={styles.infoLabel}>User ID</Text>
@@ -203,6 +308,14 @@ export default function ProfileScreen() {
             <Text style={styles.infoValue}>{user?.email}</Text>
           </View>
           <View style={styles.infoRow}>
+            <Text style={styles.infoLabel}>Mobile</Text>
+            <Text style={styles.infoValue}>
+              {userRole?.phoneNumber
+                ? `+63 ${formatMobile(mobileDigits(userRole.phoneNumber))}`
+                : 'Not set'}
+            </Text>
+          </View>
+          <View style={styles.infoRow}>
             <Text style={styles.infoLabel}>Role</Text>
             <Text style={styles.infoValue}>{userRole?.role?.replace('_', ' ') || 'user'}</Text>
           </View>
@@ -211,16 +324,16 @@ export default function ProfileScreen() {
         <TouchableOpacity
           style={[
             styles.saveButton,
-            (!displayName.trim() || isLoading) && styles.saveButtonDisabled
+            !canSave && styles.saveButtonDisabled
           ]}
           onPress={handleSaveProfile}
-          disabled={!displayName.trim() || isLoading}
+          disabled={!canSave}
         >
           <Text style={styles.saveButtonText}>
             {isLoading ? 'Saving...' : 'Save Profile'}
           </Text>
         </TouchableOpacity>
-      </View>
+      </ScrollView>
     </SafeAreaView>
   );
 }

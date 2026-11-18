@@ -1,6 +1,5 @@
 import { Ionicons } from "@expo/vector-icons";
 import { useLocalSearchParams, useRouter } from "expo-router";
-import { useVideoPlayer, VideoView } from "expo-video";
 import React, { useEffect, useState } from "react";
 import {
   ActivityIndicator,
@@ -16,6 +15,7 @@ import {
   View,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
+import { IncidentVideoPlayer } from "../../components/IncidentVideoPlayer";
 import {
   addIncidentComment,
   getIncidentById,
@@ -67,10 +67,6 @@ export default function IncidentDetailScreen() {
     incident?.videoUrl && isRemoteVideoUrl(incident.videoUrl)
       ? incident.videoUrl
       : null;
-  const videoPlayer = useVideoPlayer(playableVideoUrl, (player) => {
-    player.loop = false;
-  });
-
   useEffect(() => {
     if (id) {
       loadIncident();
@@ -239,6 +235,15 @@ export default function IncidentDetailScreen() {
       width: "100%",
       height: 220,
       backgroundColor: isDark ? "#1a1a2e" : "#ddd",
+    },
+    // On the admin web the full-width banner stretched with the browser and
+    // cropped the footage, so use a fixed 16:9 player centered on the page.
+    imageBannerWeb: {
+      width: 640,
+      maxWidth: "100%",
+      height: 360,
+      alignSelf: "center",
+      backgroundColor: "#000",
     },
     imagePlaceholder: {
       width: "100%",
@@ -552,11 +557,12 @@ export default function IncidentDetailScreen() {
 
         {/* Banner Video */}
         {playableVideoUrl ? (
-          <VideoView
-            player={videoPlayer}
-            style={styles.imageBanner}
-            contentFit="cover"
-            nativeControls
+          <IncidentVideoPlayer
+            uri={playableVideoUrl}
+            style={
+              Platform.OS === "web" ? styles.imageBannerWeb : styles.imageBanner
+            }
+            contentFit="contain"
           />
         ) : (
           <View style={styles.imagePlaceholder}>

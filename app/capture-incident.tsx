@@ -1,21 +1,22 @@
 import { Ionicons } from "@expo/vector-icons";
+import { type File, UploadTask, UploadType } from "expo-file-system";
 import * as ImagePicker from "expo-image-picker";
 import * as Location from "expo-location";
 import { useLocalSearchParams, useRouter } from "expo-router";
-import { type File, UploadTask, UploadType } from "expo-file-system";
 import { useVideoPlayer, VideoView } from "expo-video";
 import { doc, serverTimestamp, setDoc } from "firebase/firestore";
-import React, { useEffect, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import {
-  Linking,
-  Modal,
-  Platform,
-  ScrollView,
-  StyleSheet,
-  Text,
-  TouchableOpacity,
-  useColorScheme,
-  View,
+    Linking,
+    Modal,
+    Platform,
+    ScrollView,
+    StyleSheet,
+    Text,
+    TextInput,
+    TouchableOpacity,
+    useColorScheme,
+    View,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { API_BASE_URL_CANDIDATES } from "../config/api";
@@ -27,7 +28,6 @@ import { useAuth } from "../contexts/AuthContext";
 import { subscribeToActiveAgencies } from "../services/firestoreService";
 import { showAlert } from "../utils/crossPlatformAlert";
 import { copyVideoToCache, resolveLocalFile } from "../utils/localVideoFile";
-
 
 async function isBackendReachable(baseUrl: string): Promise<boolean> {
   const controller = new AbortController();
@@ -248,14 +248,15 @@ export default function CaptureIncidentScreen() {
     latitude: number;
     longitude: number;
   } | null>(null);
-  const [submittingAgency, setSubmittingAgency] = useState<Agency | null>(
-    null,
-  );
+  const [submittingAgency, setSubmittingAgency] = useState<Agency | null>(null);
   const [uploadProgress, setUploadProgress] = useState(0);
   const [isLocating, setIsLocating] = useState(false);
   const [activeAgencies, setActiveAgencies] = useState<Agency[]>([]);
   const [selectedAgency, setSelectedAgency] = useState<Agency | "">("");
   const [category, setCategory] = useState("");
+  // Free-text description typed by the reporter when the incident is "Other".
+  const [otherCategory, setOtherCategory] = useState("");
+  const isOtherCategory = category === "Other";
   const [injuryLevel, setInjuryLevel] = useState("");
 
   useEffect(() => {
@@ -280,11 +281,142 @@ export default function CaptureIncidentScreen() {
     }
   }, [params.videoUri]);
 
-  const videoPlayer = useVideoPlayer(video, (player) => {
+  // The recorded video's URI arrives via router params, which can decode it,
+  // and in Expo Go the app's folder name itself contains "%" characters
+  // ("%40anonymous%2F..."), so the exact spelling the player needs varies.
+  // Try the resolved file first, then the other spellings, moving on
+  // whenever the player reports it can't load one.
+  const videoCandidates = useMemo(() => {
+    if (!video) return [];
+    if (Platform.OS === "web") return [video];
+    const candidates = [
+      resolveLocalFile(video)?.uri,
+      video,
+      video.replace(/%/g, "%25"),
+    ];
+    try {
+      candidates.push(decodeURI(video));
+    } catch {
+      // Not valid percent-encoding - skip that spelling.
+    }
+    return [...new Set(candidates.filter((c): c is string => !!c))];
+  }, [video]);
+  // Keyed by video so a new recording/upload starts again from the first
+  // candidate without resetting state in an effect.
+  const [failedAttempts, setFailedAttempts] = useState<{
+    video: string | null;
+    count: number;
+    error?: string;
+  }>({ video: null, count: 0 });
+  const attemptIndex =
+    failedAttempts.video === video ? failedAttempts.count : 0;
+  const playableVideo = videoCandidates[attemptIndex] ?? null;
+  const videoLoadError =
+    video && failedAttempts.video === video && !playableVideo
+      ? failedAttempts.error
+      : undefined;
+
+  const videoPlayer = useVideoPlayer(playableVideo, (player) => {
     player.loop = false;
   });
 
+  useEffect(() => {
+    if (!playableVideo) return;
+    console.log("Video preview trying:", playableVideo);
+    const startMutedPreview = () => {
+      videoPlayer.muted = true;
+      videoPlayer.play();
+    };
+    if (videoPlayer.status === "readyToPlay") {
+      startMutedPreview();
+    }
+    const statusSub = videoPlayer.addListener(
+      "statusChange",
+      ({ status, error }) => {
+        if (status === "readyToPlay") {
+          console.log("Video preview loaded:", playableVideo);
+          startMutedPreview();
+        } else if (status === "error") {
+          console.warn("Video preview failed:", playableVideo, error?.message);
+          setFailedAttempts({
+            video,
+            count: attemptIndex + 1,
+            error: `${error?.message ?? "Unknown error"}\n${video}`,
+          });
+        }
+      },
+    );
+    return () => statusSub.remove();
+  }, [videoPlayer, playableVideo, video, attemptIndex]);
+
+  // Once a clip finishes, the player sits at the end and the native play
+  // button doesn't reliably restart it (notably on Android), so show our own
+  // Replay button that rewinds and plays from the start.
+  // Tracks which player finished, so a new recording/upload (which creates a
+  // new player) automatically starts without the Replay overlay.
+  const [endedPlayer, setEndedPlayer] = useState<typeof videoPlayer | null>(
+    null,
+  );
+  const videoEnded = endedPlayer === videoPlayer;
+  useEffect(() => {
+    const endSub = videoPlayer.addListener("playToEnd", () => {
+      setEndedPlayer(videoPlayer);
+    });
+    const playingSub = videoPlayer.addListener(
+      "playingChange",
+      ({ isPlaying }) => {
+        if (isPlaying) setEndedPlayer(null);
+      },
+    );
+    return () => {
+      endSub.remove();
+      playingSub.remove();
+    };
+  }, [videoPlayer]);
+
+  const replayVideo = () => {
+    setEndedPlayer(null);
+    videoPlayer.replay();
+  };
+
   const styles = StyleSheet.create({
+    replayOverlay: {
+      position: "absolute",
+      top: 0,
+      left: 0,
+      right: 0,
+      height: 200,
+      borderRadius: 8,
+      backgroundColor: "rgba(0,0,0,0.45)",
+      justifyContent: "center",
+      alignItems: "center",
+    },
+    replayText: {
+      color: "#fff",
+      fontSize: 14,
+      fontWeight: "600",
+      marginTop: 4,
+    },
+    otherInputGroup: {
+      marginBottom: 10,
+    },
+    otherLabel: {
+      fontSize: 14,
+      fontWeight: "600",
+      color: isDark ? "#fff" : "#000",
+      marginBottom: 4,
+    },
+    otherInput: {
+      backgroundColor: isDark ? "#3a3a3a" : "#fff",
+      borderWidth: 1,
+      borderColor: isDark ? "#4a4a4a" : "#dee2e6",
+      borderRadius: 6,
+      padding: 12,
+      fontSize: 14,
+      color: isDark ? "#fff" : "#000",
+      minHeight: 80,
+      textAlignVertical: "top",
+    },
     container: {
       flex: 1,
       backgroundColor: isDark ? "#000" : "#fff",
@@ -452,7 +584,10 @@ export default function CaptureIncidentScreen() {
           try {
             setVideo(await copyVideoToCache(pickedUri));
           } catch (copyError) {
-            console.warn("Could not copy picked video, using original:", copyError);
+            console.warn(
+              "Could not copy picked video, using original:",
+              copyError,
+            );
             setVideo(pickedUri);
           }
         }
@@ -513,7 +648,10 @@ export default function CaptureIncidentScreen() {
             ? undefined
             : [
                 { text: "Cancel", style: "cancel" },
-                { text: "Open Settings", onPress: () => Linking.openSettings() },
+                {
+                  text: "Open Settings",
+                  onPress: () => Linking.openSettings(),
+                },
               ],
         );
         return;
@@ -597,9 +735,16 @@ export default function CaptureIncidentScreen() {
   };
 
   const canSubmit = Boolean(
-    video && injuryLevel && selectedAgency && category,
+    video &&
+    injuryLevel &&
+    selectedAgency &&
+    category &&
+    (!isOtherCategory || otherCategory.trim()),
   );
   const isUploading = submittingAgency !== null;
+  // The button's `disabled` only applies after a re-render, so a quick double
+  // tap could otherwise start two uploads and file the same report twice.
+  const submitInFlight = useRef(false);
 
   const uploadVideoToStorage = async (
     localUri: string,
@@ -728,7 +873,10 @@ export default function CaptureIncidentScreen() {
           return `${baseUrl.replace(/\/api$/, "")}${relativePath}`;
         } catch (error) {
           lastError = error instanceof Error ? error : new Error(String(error));
-          console.warn(`Upload attempt failed, trying next host:`, lastError.message);
+          console.warn(
+            `Upload attempt failed, trying next host:`,
+            lastError.message,
+          );
         }
       }
 
@@ -756,6 +904,9 @@ export default function CaptureIncidentScreen() {
         !injuryLevel ? "injury level" : null,
         !selectedAgency ? "agency" : null,
         !category ? "incident" : null,
+        isOtherCategory && !otherCategory.trim()
+          ? "incident description"
+          : null,
       ].filter(Boolean);
 
       showAlert(
@@ -780,6 +931,9 @@ export default function CaptureIncidentScreen() {
       return;
     }
 
+    if (submitInFlight.current) return;
+    submitInFlight.current = true;
+
     const agency = selectedAgency;
     setSubmittingAgency(agency);
     setUploadProgress(0);
@@ -794,6 +948,9 @@ export default function CaptureIncidentScreen() {
         videoUrl,
         involvedAgency: agency,
         category,
+        // Category stays "Other" so admin filters still group it; the typed
+        // text goes in `description`, which the admin screens already show.
+        ...(isOtherCategory ? { description: otherCategory.trim() } : {}),
         injuryLevel,
         location: location.trim(),
         coordinates,
@@ -845,6 +1002,7 @@ export default function CaptureIncidentScreen() {
         ],
       );
     } finally {
+      submitInFlight.current = false;
       setSubmittingAgency(null);
       setUploadProgress(0);
     }
@@ -858,13 +1016,35 @@ export default function CaptureIncidentScreen() {
 
       <ScrollView style={styles.content} showsVerticalScrollIndicator={false}>
         <View style={styles.imageContainer}>
-          {video ? (
-            <VideoView
-              player={videoPlayer}
-              style={styles.capturedImage}
-              nativeControls
-              contentFit="cover"
-            />
+          {video && videoLoadError ? (
+            <View style={styles.placeholderImage}>
+              <Ionicons name="alert-circle" size={40} color="#FF3B30" />
+              <Text style={styles.placeholderText}>
+                {"Couldn't load the video preview:\n" + videoLoadError}
+              </Text>
+            </View>
+          ) : video ? (
+            <View>
+              {/* textureView: the default SurfaceView renders black or stops
+                  redrawing inside a ScrollView / rounded container on Android. */}
+              <VideoView
+                player={videoPlayer}
+                style={styles.capturedImage}
+                nativeControls
+                contentFit="cover"
+                surfaceType="textureView"
+              />
+              {videoEnded ? (
+                <TouchableOpacity
+                  style={styles.replayOverlay}
+                  onPress={replayVideo}
+                  accessibilityLabel="Replay video"
+                >
+                  <Ionicons name="refresh" size={36} color="#fff" />
+                  <Text style={styles.replayText}>Replay</Text>
+                </TouchableOpacity>
+              ) : null}
+            </View>
           ) : (
             <View style={styles.placeholderImage}>
               <Ionicons
@@ -963,7 +1143,10 @@ export default function CaptureIncidentScreen() {
           onSelect={(value) => {
             // Incident types belong to an agency, so switching agencies
             // clears whatever was picked from the previous agency's list.
-            if (value !== selectedAgency) setCategory("");
+            if (value !== selectedAgency) {
+              setCategory("");
+              setOtherCategory("");
+            }
             setSelectedAgency(value as Agency);
           }}
           isDark={isDark}
@@ -978,6 +1161,21 @@ export default function CaptureIncidentScreen() {
             onSelect={setCategory}
             isDark={isDark}
           />
+        ) : null}
+
+        {selectedAgency && isOtherCategory ? (
+          <View style={styles.otherInputGroup}>
+            <Text style={styles.otherLabel}>Describe the incident</Text>
+            <TextInput
+              style={styles.otherInput}
+              value={otherCategory}
+              onChangeText={setOtherCategory}
+              placeholder="Type what happened..."
+              placeholderTextColor={isDark ? "#888" : "#999"}
+              multiline
+              maxLength={200}
+            />
+          </View>
         ) : null}
 
         {activeAgencies.length > 0 ? (
@@ -1009,8 +1207,7 @@ export default function CaptureIncidentScreen() {
           </>
         ) : (
           <Text style={styles.placeholderText}>
-            No agencies are currently accepting reports. Please try again
-            later.
+            No agencies are currently accepting reports. Please try again later.
           </Text>
         )}
       </ScrollView>

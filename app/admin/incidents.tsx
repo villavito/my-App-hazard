@@ -7,6 +7,7 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import {
   ActivityIndicator,
   FlatList,
+  Platform,
   RefreshControl,
   ScrollView,
   StyleSheet,
@@ -24,6 +25,7 @@ import {
   getIncidentsByAgency,
 } from "../../services/firestoreService";
 import { showAlert } from "../../utils/crossPlatformAlert";
+import { getIncidentVideoUrlCandidates } from "../../utils/incidentVideo";
 
 const INBOX_AGENCIES = AGENCIES;
 type InboxAgency = Agency;
@@ -92,7 +94,49 @@ function VideoThumbnail({
     );
   }
 
+  // expo-video can't generate thumbnails on web ("not supported on Web yet"),
+  // so the browser draws the first frame itself.
+  if (Platform.OS === "web") {
+    return <WebVideoThumbnail uri={uri} style={style} overlayStyle={overlayStyle} onPress={onPress} />;
+  }
+
   return <RemoteVideoThumbnail uri={uri} style={style} overlayStyle={overlayStyle} onPress={onPress} />;
+}
+
+function WebVideoThumbnail({
+  uri,
+  style,
+  overlayStyle,
+  onPress,
+}: {
+  uri: string;
+  style: object;
+  overlayStyle: object;
+  onPress: () => void;
+}) {
+  return (
+    <TouchableOpacity style={[style, thumbnailLoadingStyle]} onPress={onPress} activeOpacity={0.8}>
+      {/* preload="metadata" + "#t=0.1" loads just enough to show a frame
+          instead of downloading the whole video for every row. */}
+      <video
+        src={`${uri}#t=0.1`}
+        preload="metadata"
+        muted
+        playsInline
+        style={{
+          position: "absolute",
+          inset: 0,
+          width: "100%",
+          height: "100%",
+          objectFit: "cover",
+          pointerEvents: "none",
+        }}
+      />
+      <View style={overlayStyle}>
+        <Ionicons name="play-circle" size={36} color="#fff" />
+      </View>
+    </TouchableOpacity>
+  );
 }
 
 function RemoteVideoThumbnail({
@@ -106,7 +150,17 @@ function RemoteVideoThumbnail({
   overlayStyle: object;
   onPress: () => void;
 }) {
-  const [thumbnail, setThumbnail] = useState<VideoThumbnailImage | null>(null);
+  const candidates = getIncidentVideoUrlCandidates(uri);
+  const [failedSource, setFailedSource] = useState<{
+    uri: string;
+    index: number;
+  } | null>(null);
+  const [thumbnailResult, setThumbnailResult] = useState<{
+    uri: string;
+    thumbnail: VideoThumbnailImage;
+  } | null>(null);
+  const attemptIndex = failedSource?.uri === uri ? failedSource.index : 0;
+  const source = candidates[attemptIndex];
 
   useEffect(() => {
     let cancelled = false;
@@ -132,21 +186,26 @@ function RemoteVideoThumbnail({
     // "tainted canvas" error on cross-origin video URLs) instead of rejecting
     // a promise, which would otherwise bypass the .catch() below entirely.
     try {
-      player = createVideoPlayer(uri);
+      if (!source) return;
+      player = createVideoPlayer(source);
       Promise.resolve(player.generateThumbnailsAsync(0, { maxWidth: 320 }))
         .then(([frame]) => {
-          if (!cancelled) setThumbnail(frame);
+          if (!cancelled && frame) {
+            setThumbnailResult({ uri, thumbnail: frame });
+          }
         })
         .catch((error) => {
-          // A row that unmounted mid-generation released its player on
-          // purpose; that rejection isn't worth a warning.
           if (!cancelled) {
             console.warn("Error generating video thumbnail:", error);
+            setFailedSource({ uri, index: attemptIndex + 1 });
           }
         })
         .finally(releasePlayer);
     } catch (error) {
-      console.warn("Error generating video thumbnail:", error);
+      if (!cancelled) {
+        console.warn("Error generating video thumbnail:", error);
+        setFailedSource({ uri, index: attemptIndex + 1 });
+      }
       releasePlayer();
     }
 
@@ -154,19 +213,23 @@ function RemoteVideoThumbnail({
       cancelled = true;
       releasePlayer();
     };
-  }, [uri]);
+  }, [attemptIndex, source, uri]);
 
   return (
     <TouchableOpacity style={style} onPress={onPress} activeOpacity={0.8}>
-      {thumbnail ? (
+      {thumbnailResult?.uri === uri ? (
         <Image
-          source={thumbnail}
+          source={thumbnailResult.thumbnail}
           style={StyleSheet.absoluteFill}
           contentFit="cover"
         />
       ) : (
         <View style={[StyleSheet.absoluteFill, thumbnailLoadingStyle]}>
-          <ActivityIndicator size="small" color="#fff" />
+          {source ? (
+            <ActivityIndicator size="small" color="#fff" />
+          ) : (
+            <Ionicons name="videocam-off-outline" size={28} color="#fff" />
+          )}
         </View>
       )}
       <View style={overlayStyle}>

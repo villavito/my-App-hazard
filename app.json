@@ -5,10 +5,7 @@
     "version": "1.0.0",
     "orientation": "portrait",
     "icon": "./assets/images/icon.png",
-    "scheme": [
-      "incident-reporting-app",
-      "com.villavito.incidentreportingapp"
-    ],
+    "scheme": "incident-reporting-app",
     "userInterfaceStyle": "automatic",
     "ios": {
       "supportsTablet": true,
@@ -65,7 +62,8 @@
       "expo-font",
       "expo-web-browser",
       "expo-image",
-      "expo-status-bar"
+      "expo-status-bar",
+      "expo-sharing"
     ],
     "experiments": {
       "typedRoutes": true,

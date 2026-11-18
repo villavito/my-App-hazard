@@ -2,14 +2,26 @@ import { useRouter } from 'expo-router';
 import { useState } from 'react';
 import { StyleSheet, Text, TextInput, TouchableOpacity, useColorScheme, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { API_BASE_URL } from '../config/api';
+import { postToBackend } from '../config/api';
 import { showAlert } from '../utils/crossPlatformAlert';
+import {
+  formatMobile,
+  isValidMobile,
+  mobileDigits,
+  mobileErrorMessage,
+  toE164Mobile,
+} from '../utils/phoneNumber';
+
+type RecoveryMethod = 'email' | 'phone';
 
 export default function ForgotPasswordScreen() {
   const colorScheme = useColorScheme();
   const isDark = colorScheme === 'dark';
-  const [step, setStep] = useState<'email' | 'reset'>('email');
+  const [step, setStep] = useState<'request' | 'reset'>('request');
+  const [method, setMethod] = useState<RecoveryMethod>('email');
   const [email, setEmail] = useState('');
+  // The 10 digits after +63, as on the signup screen.
+  const [mobile, setMobile] = useState('');
   const [code, setCode] = useState('');
   const [newPassword, setNewPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
@@ -60,6 +72,56 @@ export default function ForgotPasswordScreen() {
       borderWidth: 1,
       borderColor: isDark ? '#444' : '#e0e0e0',
     },
+    methodSwitch: {
+      flexDirection: 'row',
+      backgroundColor: isDark ? '#2a2a2a' : '#f0f1f3',
+      borderRadius: 12,
+      padding: 4,
+      marginBottom: 20,
+    },
+    methodOption: {
+      flex: 1,
+      paddingVertical: 10,
+      borderRadius: 9,
+      alignItems: 'center',
+    },
+    methodOptionActive: {
+      backgroundColor: '#007AFF',
+    },
+    methodOptionText: {
+      fontSize: 15,
+      fontWeight: '600',
+      color: isDark ? '#aaa' : '#555',
+    },
+    methodOptionTextActive: {
+      color: '#fff',
+    },
+    phoneRow: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      backgroundColor: isDark ? '#2a2a2a' : '#f8f9fa',
+      borderRadius: 12,
+      borderWidth: 1,
+      borderColor: isDark ? '#444' : '#e0e0e0',
+    },
+    phonePrefix: {
+      paddingLeft: 16,
+      paddingRight: 12,
+      paddingVertical: 16,
+      borderRightWidth: 1,
+      borderRightColor: isDark ? '#444' : '#e0e0e0',
+    },
+    phonePrefixText: {
+      fontSize: 16,
+      fontWeight: '600',
+      color: isDark ? '#fff' : '#000',
+    },
+    phoneInput: {
+      flex: 1,
+      padding: 16,
+      fontSize: 16,
+      color: isDark ? '#fff' : '#000',
+    },
     button: {
       backgroundColor: '#007AFF',
       paddingVertical: 16,
@@ -102,33 +164,54 @@ export default function ForgotPasswordScreen() {
     },
   });
 
-  const handleSendCode = async () => {
-    if (!email) {
-      showAlert('Error', 'Please enter your email address');
-      return;
-    }
+  // The backend keys reset codes by the exact email / number string, so
+  // " Juan@Gmail.com" and "juan@gmail.com" must be sent identically in every step.
+  const normalizedEmail = email.trim().toLowerCase();
+  const recoveryTarget =
+    method === 'email' ? { email: normalizedEmail } : { phone: toE164Mobile(mobile) };
+  const sentTo = method === 'email' ? normalizedEmail : `+63 ${formatMobile(mobile)}`;
 
-    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-    if (!emailRegex.test(email)) {
-      showAlert('Error', 'Please enter a valid email address');
+  const handleSendCode = async () => {
+    if (method === 'email') {
+      if (!normalizedEmail) {
+        showAlert('Error', 'Please enter your email address');
+        return;
+      }
+      const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+      if (!emailRegex.test(normalizedEmail)) {
+        showAlert('Error', 'Please enter a valid email address');
+        return;
+      }
+    } else if (!isValidMobile(mobile)) {
+      showAlert('Error', mobileErrorMessage(mobile));
       return;
     }
 
     setLoading(true);
     try {
-      const response = await fetch(`${API_BASE_URL}/auth/forgot-password/send-code`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ email }),
-      });
-      const data = await response.json();
+      const { ok, data } = await postToBackend(
+        '/auth/forgot-password/send-code',
+        recoveryTarget,
+      );
 
-      if (!response.ok || !data.success) {
+      if (!ok || !data.success) {
         showAlert('Error', data.error || 'Failed to send reset code');
         return;
       }
 
-      showAlert('Code Sent', 'A 6-digit reset code has been sent to your email.');
+      // The server doesn't say whether the account exists (so this screen
+      // can't be used to find out who has one), hence "if".
+      if (method === 'email') {
+        showAlert(
+          'Check Your Email',
+          'If an account exists for this email, a 6-digit reset code has been sent. It expires in 10 minutes - check your spam folder too.',
+        );
+      } else {
+        showAlert(
+          'Check Your Messages',
+          'If an account uses this mobile number, a 6-digit reset code has been sent by SMS. It expires in 10 minutes.',
+        );
+      }
       setStep('reset');
     } catch (error: any) {
       showAlert('Error', 'Network error. Please check your connection and try again.');
@@ -139,11 +222,25 @@ export default function ForgotPasswordScreen() {
 
   const handleResetPassword = async () => {
     if (!code || code.length !== 6) {
-      showAlert('Error', 'Please enter the 6-digit code sent to your email');
+      showAlert(
+        'Error',
+        method === 'email'
+          ? 'Please enter the 6-digit code sent to your email'
+          : 'Please enter the 6-digit code sent to your mobile number',
+      );
       return;
     }
-    if (!newPassword || newPassword.length < 6) {
-      showAlert('Error', 'Password must be at least 6 characters');
+    // Same rules as the Create Account screen.
+    if (
+      newPassword.length < 8 ||
+      !/[A-Z]/.test(newPassword) ||
+      !/[a-z]/.test(newPassword) ||
+      !/\d/.test(newPassword)
+    ) {
+      showAlert(
+        'Weak Password',
+        'Your new password needs at least 8 characters, an uppercase letter, a lowercase letter, and a number.',
+      );
       return;
     }
     if (newPassword !== confirmPassword) {
@@ -153,24 +250,22 @@ export default function ForgotPasswordScreen() {
 
     setLoading(true);
     try {
-      const verifyResponse = await fetch(`${API_BASE_URL}/auth/forgot-password/verify-code`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ email, code }),
+      const verify = await postToBackend('/auth/forgot-password/verify-code', {
+        ...recoveryTarget,
+        code,
       });
-      const verifyData = await verifyResponse.json();
-      if (!verifyResponse.ok || !verifyData.success) {
-        showAlert('Error', verifyData.error || 'Invalid or expired code');
+      if (!verify.ok || !verify.data.success) {
+        showAlert('Error', verify.data.error || 'Invalid or expired code');
         return;
       }
 
-      const resetResponse = await fetch(`${API_BASE_URL}/auth/forgot-password/reset`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ email, code, newPassword }),
+      const reset = await postToBackend('/auth/forgot-password/reset', {
+        ...recoveryTarget,
+        code,
+        newPassword,
       });
-      const resetData = await resetResponse.json();
-      if (!resetResponse.ok || !resetData.success) {
+      const resetData = reset.data;
+      if (!reset.ok || !resetData.success) {
         showAlert('Error', resetData.error || 'Failed to reset password');
         return;
       }
@@ -187,6 +282,11 @@ export default function ForgotPasswordScreen() {
     }
   };
 
+  const switchMethod = (next: RecoveryMethod) => {
+    setMethod(next);
+    setCode('');
+  };
+
   return (
     <SafeAreaView style={styles.container}>
       <View style={styles.header}>
@@ -195,27 +295,84 @@ export default function ForgotPasswordScreen() {
       </View>
 
       <View style={styles.form}>
-        {step === 'email' ? (
+        {step === 'request' ? (
           <>
+            <View style={styles.methodSwitch}>
+              {(
+                [
+                  ['email', 'Email'],
+                  ['phone', 'Mobile Number'],
+                ] as const
+              ).map(([value, label]) => (
+                <TouchableOpacity
+                  key={value}
+                  style={[styles.methodOption, method === value && styles.methodOptionActive]}
+                  onPress={() => switchMethod(value)}
+                  disabled={loading}
+                >
+                  <Text
+                    style={[
+                      styles.methodOptionText,
+                      method === value && styles.methodOptionTextActive,
+                    ]}
+                  >
+                    {label}
+                  </Text>
+                </TouchableOpacity>
+              ))}
+            </View>
+
             <View style={styles.infoBox}>
               <Text style={styles.infoText}>
-                Enter your email address and we&apos;ll send you a 6-digit code to reset your password.
+                {method === 'email'
+                  ? 'Enter your email address and we’ll send you a 6-digit code to reset your password.'
+                  : 'Enter the mobile number saved on your account and we’ll text you a 6-digit code to reset your password.'}
               </Text>
             </View>
 
-            <View style={styles.inputGroup}>
-              <Text style={styles.label}>Email Address</Text>
-              <TextInput
-                style={styles.input}
-                placeholder="Enter your email"
-                placeholderTextColor={isDark ? '#888' : '#999'}
-                value={email}
-                onChangeText={setEmail}
-                keyboardType="email-address"
-                autoCapitalize="none"
-                autoCorrect={false}
-              />
-            </View>
+            {method === 'email' ? (
+              <View style={styles.inputGroup}>
+                <Text style={styles.label}>Email Address</Text>
+                <TextInput
+                  style={styles.input}
+                  placeholder="Enter your email"
+                  placeholderTextColor={isDark ? '#888' : '#999'}
+                  value={email}
+                  // Emails never contain whitespace; stripping it also stops
+                  // pasted multi-line text from stretching the field on Android.
+                  onChangeText={(text) => setEmail(text.replace(/\s/g, ''))}
+                  keyboardType="email-address"
+                  autoCapitalize="none"
+                  autoCorrect={false}
+                  autoComplete="email"
+                  textContentType="emailAddress"
+                  multiline={false}
+                  numberOfLines={1}
+                />
+              </View>
+            ) : (
+              <View style={styles.inputGroup}>
+                <Text style={styles.label}>Mobile Number</Text>
+                <View style={styles.phoneRow}>
+                  <View style={styles.phonePrefix}>
+                    <Text style={styles.phonePrefixText}>🇵🇭 +63</Text>
+                  </View>
+                  <TextInput
+                    style={styles.phoneInput}
+                    placeholder="917 123 4567"
+                    placeholderTextColor={isDark ? '#888' : '#999'}
+                    value={formatMobile(mobile)}
+                    onChangeText={(text) => setMobile(mobileDigits(text))}
+                    keyboardType="phone-pad"
+                    autoComplete="tel"
+                    textContentType="telephoneNumber"
+                    maxLength={14}
+                    multiline={false}
+                    numberOfLines={1}
+                  />
+                </View>
+              </View>
+            )}
 
             <TouchableOpacity
               style={styles.button}
@@ -231,7 +388,7 @@ export default function ForgotPasswordScreen() {
           <>
             <View style={styles.infoBox}>
               <Text style={styles.infoText}>
-                Enter the 6-digit code sent to {email} and choose a new password.
+                Enter the 6-digit code sent to {sentTo} and choose a new password.
               </Text>
             </View>
 
@@ -244,6 +401,8 @@ export default function ForgotPasswordScreen() {
                 value={code}
                 onChangeText={(text) => setCode(text.replace(/[^0-9]/g, '').slice(0, 6))}
                 keyboardType="number-pad"
+                autoComplete="sms-otp"
+                textContentType="oneTimeCode"
                 maxLength={6}
               />
             </View>
@@ -258,6 +417,8 @@ export default function ForgotPasswordScreen() {
                 onChangeText={setNewPassword}
                 secureTextEntry
                 autoCapitalize="none"
+                multiline={false}
+                numberOfLines={1}
               />
             </View>
 
@@ -271,6 +432,8 @@ export default function ForgotPasswordScreen() {
                 onChangeText={setConfirmPassword}
                 secureTextEntry
                 autoCapitalize="none"
+                multiline={false}
+                numberOfLines={1}
               />
             </View>
 
@@ -284,9 +447,9 @@ export default function ForgotPasswordScreen() {
               </Text>
             </TouchableOpacity>
 
-            <TouchableOpacity onPress={() => setStep('email')} disabled={loading}>
+            <TouchableOpacity onPress={() => setStep('request')} disabled={loading}>
               <Text style={[styles.backLink, { textAlign: 'center', marginTop: 16 }]}>
-                Use a different email
+                {method === 'email' ? 'Use a different email' : 'Use a different number'}
               </Text>
             </TouchableOpacity>
           </>
@@ -302,4 +465,3 @@ export default function ForgotPasswordScreen() {
     </SafeAreaView>
   );
 }
-

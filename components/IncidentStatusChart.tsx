@@ -56,7 +56,14 @@ export default function IncidentStatusChart({
     );
   }
 
-  let cumulative = 0;
+  // Each slice's start position along the ring, computed up front rather than
+  // by mutating a running total inside the render .map() (which the React
+  // Compiler rejects and can miscompile).
+  const startOffsets = slices.map((_, i) =>
+    slices
+      .slice(0, i)
+      .reduce((sum, s) => sum + (s.value / total) * CIRCUMFERENCE, 0),
+  );
 
   return (
     <View style={styles.row}>
@@ -75,11 +82,10 @@ export default function IncidentStatusChart({
             strokeWidth={STROKE_WIDTH}
             fill="none"
           />
-          {slices.map((slice) => {
+          {slices.map((slice, i) => {
             const fraction = slice.value / total;
             const length = Math.max(fraction * CIRCUMFERENCE - GAP, 0);
-            const offset = -cumulative;
-            cumulative += fraction * CIRCUMFERENCE;
+            const offset = -startOffsets[i];
             const isDimmed = activeSlice && activeSlice.key !== slice.key;
 
             return (
@@ -99,8 +105,9 @@ export default function IncidentStatusChart({
                 strokeLinecap="butt"
                 strokeOpacity={isDimmed ? 0.35 : 1}
                 fill="none"
-                rotation={-90}
-                origin={`${SIZE / 2}, ${SIZE / 2}`}
+                // Plain SVG transform (start at 12 o'clock) - the
+                // rotation/origin props break react-native-svg on web.
+                transform={`rotate(-90 ${SIZE / 2} ${SIZE / 2})`}
               />
             );
           })}

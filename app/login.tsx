@@ -1,8 +1,12 @@
 import { Ionicons } from "@expo/vector-icons";
+import * as Google from "expo-auth-session/providers/google";
+import Constants, { AppOwnership } from "expo-constants";
 import { useRouter } from "expo-router";
-import { useState } from "react";
+import * as WebBrowser from "expo-web-browser";
+import { useCallback, useEffect, useRef, useState } from "react";
 import {
   ActivityIndicator,
+  Platform,
   StyleSheet,
   Text,
   TextInput,
@@ -12,8 +16,15 @@ import {
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { useAuth } from "../contexts/AuthContext";
-import { friendlyAuthError, signInUser } from "../services/authService";
+import {
+  friendlyAuthError,
+  signInUser,
+  signInWithGoogleToken,
+  signInWithGooglePopup,
+} from "../services/authService";
 import { showAlert } from "../utils/crossPlatformAlert";
+
+WebBrowser.maybeCompleteAuthSession();
 
 export default function LoginScreen() {
   const colorScheme = useColorScheme();
@@ -22,8 +33,33 @@ export default function LoginScreen() {
   const [password, setPassword] = useState("");
   const [showPassword, setShowPassword] = useState(false);
   const [loading, setLoading] = useState(false);
+  const [googleLoading, setGoogleLoading] = useState(false);
   const router = useRouter();
-  const { refreshUserRole } = useAuth();
+  const { user, loading: authLoading, refreshUserRole } = useAuth();
+  const [googleRequest, googleResponse, promptGoogleSignIn] =
+    Google.useIdTokenAuthRequest({
+      iosClientId:
+        process.env.EXPO_PUBLIC_GOOGLE_IOS_CLIENT_ID ??
+        "ios-client-id-not-configured",
+      androidClientId:
+        process.env.EXPO_PUBLIC_GOOGLE_ANDROID_CLIENT_ID ??
+        "android-client-id-not-configured",
+      webClientId:
+        process.env.EXPO_PUBLIC_GOOGLE_WEB_CLIENT_ID ??
+        "web-client-id-not-configured",
+    }, {
+      native: "incident-reporting-app:/oauthredirect",
+      scheme: "incident-reporting-app",
+    });
+  const hasGoogleClientId =
+    Platform.OS === "ios"
+      ? Boolean(process.env.EXPO_PUBLIC_GOOGLE_IOS_CLIENT_ID)
+      : Platform.OS === "android"
+        ? Boolean(process.env.EXPO_PUBLIC_GOOGLE_ANDROID_CLIENT_ID)
+        : Boolean(process.env.EXPO_PUBLIC_GOOGLE_WEB_CLIENT_ID);
+  const isExpoGo = Constants.appOwnership === AppOwnership.Expo;
+  const handledGoogleResponse = useRef<object | null>(null);
+  const autoPromptStarted = useRef(false);
 
   const styles = StyleSheet.create({
     container: {
@@ -124,7 +160,205 @@ export default function LoginScreen() {
       fontSize: 14,
       fontWeight: "600",
     },
+    divider: {
+      flexDirection: "row",
+      alignItems: "center",
+      marginTop: 24,
+    },
+    dividerLine: {
+      flex: 1,
+      height: 1,
+      backgroundColor: isDark ? "#444" : "#ddd",
+    },
+    dividerText: {
+      marginHorizontal: 12,
+      color: isDark ? "#888" : "#666",
+      fontSize: 14,
+    },
+    googleButton: {
+      flexDirection: "row",
+      alignItems: "center",
+      justifyContent: "center",
+      backgroundColor: isDark ? "#2a2a2a" : "#fff",
+      borderWidth: 1,
+      borderColor: isDark ? "#444" : "#ddd",
+      borderRadius: 12,
+      paddingVertical: 14,
+      marginTop: 16,
+    },
+    googleButtonText: {
+      color: isDark ? "#fff" : "#222",
+      fontSize: 16,
+      fontWeight: "600",
+      marginLeft: 10,
+    },
+    googleSetupText: {
+      color: isDark ? "#aaa" : "#666",
+      fontSize: 13,
+      textAlign: "center",
+      marginTop: 10,
+    },
   });
+
+  const navigateByRole = useCallback(
+    (role: "user" | "admin" | "super_admin") => {
+      if (role === "super_admin") {
+        router.push("/admin/super-admin");
+      } else if (role === "admin") {
+        router.push("/admin/dashboard");
+      } else {
+        router.push("/(tabs)");
+      }
+    },
+    [router],
+  );
+
+  const startGoogleSignIn = useCallback(async () => {
+    setLoading(true);
+    setGoogleLoading(true);
+    try {
+      const result = await promptGoogleSignIn();
+      if (result.type !== "success") {
+        setLoading(false);
+        setGoogleLoading(false);
+        if (result.type === "error") {
+          showAlert(
+            "Google Sign-In Error",
+            result.error?.description || "Google sign-in was not completed.",
+          );
+        }
+      }
+    } catch (error: any) {
+      setLoading(false);
+      setGoogleLoading(false);
+      showAlert(
+        "Google Sign-In Error",
+        friendlyAuthError(error?.code, error?.message),
+      );
+    }
+  }, [promptGoogleSignIn]);
+
+  useEffect(() => {
+    if (
+      Platform.OS === "web" ||
+      isExpoGo ||
+      authLoading ||
+      user ||
+      !hasGoogleClientId ||
+      !googleRequest ||
+      autoPromptStarted.current
+    ) {
+      return;
+    }
+
+    const timer = setTimeout(() => {
+      if (autoPromptStarted.current) return;
+      autoPromptStarted.current = true;
+      void startGoogleSignIn();
+    }, 0);
+
+    return () => clearTimeout(timer);
+  }, [
+    authLoading,
+    googleRequest,
+    hasGoogleClientId,
+    isExpoGo,
+    startGoogleSignIn,
+    user,
+  ]);
+
+  useEffect(() => {
+    if (!googleResponse || handledGoogleResponse.current === googleResponse) {
+      return;
+    }
+    handledGoogleResponse.current = googleResponse;
+
+    void (async () => {
+      if (googleResponse.type !== "success") return;
+
+      const idToken = googleResponse.params.id_token;
+      if (!idToken) {
+        setLoading(false);
+        setGoogleLoading(false);
+        showAlert("Google Sign-In Error", "Google did not return an ID token.");
+        return;
+      }
+
+      try {
+        const result = await signInWithGoogleToken(idToken);
+        if (result.success) {
+          await refreshUserRole();
+          navigateByRole(result.user.role);
+        } else {
+          showAlert("Google Sign-In Error", result.error);
+        }
+      } catch (error: any) {
+        showAlert(
+          "Google Sign-In Error",
+          friendlyAuthError(error?.code, error?.message),
+        );
+      } finally {
+        setLoading(false);
+        setGoogleLoading(false);
+      }
+    })();
+  }, [googleResponse, navigateByRole, refreshUserRole]);
+
+  const handleGoogleLogin = () => {
+    if (Platform.OS === "web") {
+      setLoading(true);
+      setGoogleLoading(true);
+      void (async () => {
+        try {
+          const result = await signInWithGooglePopup();
+          if (result.success) {
+            await refreshUserRole();
+            navigateByRole(result.user.role);
+          } else if (
+            !("code" in result) ||
+            result.code !== "auth/popup-closed-by-user"
+          ) {
+            showAlert("Google Sign-In Error", result.error);
+          }
+        } catch (error: any) {
+          showAlert(
+            "Google Sign-In Error",
+            friendlyAuthError(error?.code, error?.message),
+          );
+        } finally {
+          setLoading(false);
+          setGoogleLoading(false);
+        }
+      })();
+      return;
+    }
+
+    if (isExpoGo) {
+      showAlert(
+        "Development Build Required",
+        "Google sign-in can't return to the app from Expo Go. Run this app in a development build instead.",
+      );
+      return;
+    }
+
+    if (!hasGoogleClientId) {
+      showAlert(
+        "Google Sign-In Unavailable",
+        "Configure the Google OAuth client ID for this platform.",
+      );
+      return;
+    }
+
+    if (!googleRequest) {
+      showAlert(
+        "Google Sign-In Unavailable",
+        "Google sign-in is still loading. Please try again.",
+      );
+      return;
+    }
+
+    void startGoogleSignIn();
+  };
 
   const handleLogin = async () => {
     console.log("handleLogin invoked", { email });
@@ -137,7 +371,7 @@ export default function LoginScreen() {
     try {
       const result = await signInUser(email, password);
 
-      if (result.success && result.user) {
+      if (result.success) {
         // Sign-in can fill in an admin's agency after AuthContext already
         // loaded the role, so reload it before the admin screens read it.
         await refreshUserRole();
@@ -146,13 +380,7 @@ export default function LoginScreen() {
           `Welcome back! You are logged in as ${result.user.role}`,
         );
         // Navigate based on user role
-        if (result.user.role === "super_admin") {
-          router.push("/admin/super-admin");
-        } else if (result.user.role === "admin") {
-          router.push("/admin/dashboard");
-        } else {
-          router.push("/(tabs)");
-        }
+        navigateByRole(result.user.role);
       } else {
         showAlert("Login Error", result.error || "Login failed");
       }
@@ -178,9 +406,16 @@ export default function LoginScreen() {
             placeholder="Enter your email"
             placeholderTextColor={isDark ? "#888" : "#999"}
             value={email}
-            onChangeText={setEmail}
+            // Emails never contain whitespace; stripping it also stops pasted
+            // multi-line text from stretching the field on Android.
+            onChangeText={(text) => setEmail(text.replace(/\s/g, ""))}
             keyboardType="email-address"
             autoCapitalize="none"
+            autoCorrect={false}
+            autoComplete="email"
+            textContentType="emailAddress"
+            multiline={false}
+            numberOfLines={1}
           />
         </View>
 
@@ -194,6 +429,8 @@ export default function LoginScreen() {
               value={password}
               onChangeText={setPassword}
               secureTextEntry={!showPassword}
+              multiline={false}
+              numberOfLines={1}
             />
             <TouchableOpacity onPress={() => setShowPassword(!showPassword)}>
               <Ionicons
@@ -225,6 +462,47 @@ export default function LoginScreen() {
             <Text style={styles.buttonText}>Sign In</Text>
           )}
         </TouchableOpacity>
+
+        <View style={styles.divider}>
+          <View style={styles.dividerLine} />
+          <Text style={styles.dividerText}>or</Text>
+          <View style={styles.dividerLine} />
+        </View>
+
+        <TouchableOpacity
+          style={[
+            styles.googleButton,
+            (loading ||
+              (Platform.OS !== "web" &&
+                (!googleRequest || !hasGoogleClientId))) &&
+              styles.buttonDisabled,
+          ]}
+          onPress={handleGoogleLogin}
+          disabled={
+            loading ||
+            (Platform.OS !== "web" &&
+              (!googleRequest || !hasGoogleClientId))
+          }
+        >
+          {googleLoading ? (
+            <ActivityIndicator color={isDark ? "#fff" : "#222"} />
+          ) : (
+            <>
+              <Ionicons name="logo-google" size={20} color="#4285F4" />
+              <Text style={styles.googleButtonText}>Continue with Google</Text>
+            </>
+          )}
+        </TouchableOpacity>
+        {Platform.OS !== "web" && isExpoGo ? (
+          <Text style={styles.googleSetupText}>
+            Google sign-in requires a development build; it cannot complete its
+            OAuth redirect in Expo Go.
+          </Text>
+        ) : Platform.OS !== "web" && !hasGoogleClientId ? (
+          <Text style={styles.googleSetupText}>
+            Google sign-in needs OAuth client IDs for this platform.
+          </Text>
+        ) : null}
 
         <View style={styles.signupContainer}>
           <Text style={styles.signupText}>Don&apos;t have an account? </Text>

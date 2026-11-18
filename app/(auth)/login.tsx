@@ -1,13 +1,13 @@
 import { router } from "expo-router";
 import { useState } from "react";
 import {
-  KeyboardAvoidingView,
-  Platform,
-  StyleSheet,
-  Text,
-  TextInput,
-  TouchableOpacity,
-  View,
+    KeyboardAvoidingView,
+    Platform,
+    StyleSheet,
+    Text,
+    TextInput,
+    TouchableOpacity,
+    View,
 } from "react-native";
 
 export default function LoginScreen() {
@@ -55,9 +55,15 @@ export default function LoginScreen() {
           placeholder="Email"
           placeholderTextColor="#a0a0a0"
           value={email}
-          onChangeText={setEmail}
+          // Emails never contain whitespace; stripping it also stops pasted
+          // multi-line text from stretching the field.
+          onChangeText={(text) => setEmail(text.replace(/\s/g, ""))}
           autoCapitalize="none"
+          autoCorrect={false}
+          autoComplete="email"
           keyboardType="email-address"
+          multiline={false}
+          numberOfLines={1}
         />
 
         <TextInput
@@ -67,6 +73,8 @@ export default function LoginScreen() {
           value={password}
           onChangeText={setPassword}
           secureTextEntry
+          multiline={false}
+          numberOfLines={1}
         />
 
         {error ? <Text style={styles.errorText}>{error}</Text> : null}
@@ -82,7 +90,7 @@ export default function LoginScreen() {
         </TouchableOpacity>
 
         <TouchableOpacity
-          onPress={() => router.push("./forgotpassword")}
+          onPress={() => router.push("/forgot-password")}
           style={styles.forgotPasswordButton}
         >
           <Text style={styles.forgotPasswordText}>Forgot Password?</Text>

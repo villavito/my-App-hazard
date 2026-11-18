@@ -4,6 +4,7 @@ import {
   deleteDoc,
   deleteField,
   doc,
+  getCountFromServer,
   getDoc,
   getDocs,
   limit,
@@ -12,6 +13,7 @@ import {
   query,
   serverTimestamp,
   setDoc,
+  Timestamp,
   updateDoc,
   where,
 } from "firebase/firestore";
@@ -257,6 +259,58 @@ export const getIncidentsByAgency = async (agency: string, limitCount = 50) => {
     return { success: true, data: incidents };
   } catch (error) {
     console.error("Error getting incidents by agency:", error);
+    return { success: false, error };
+  }
+};
+
+// Every incident created in [start, end), uncapped, for report generation.
+// Same agency scoping rule as getAllIncidents. Ordered newest first so the
+// agency variant uses the existing (involvedAgency, createdAt desc) index.
+const incidentsInRangeQuery = (start: Date, end: Date, agency?: string) =>
+  query(
+    collection(db, "incidents"),
+    ...(agency ? [where("involvedAgency", "==", agency)] : []),
+    where("createdAt", ">=", Timestamp.fromDate(start)),
+    where("createdAt", "<", Timestamp.fromDate(end)),
+    orderBy("createdAt", "desc"),
+  );
+
+export const getIncidentsInRange = async (
+  start: Date,
+  end: Date,
+  agency?: string,
+) => {
+  try {
+    const querySnapshot = await getDocs(
+      incidentsInRangeQuery(start, end, agency),
+    );
+
+    const incidents = querySnapshot.docs.map((docSnap) => ({
+      id: docSnap.id,
+      ...docSnap.data(),
+    }));
+
+    return { success: true, data: incidents };
+  } catch (error) {
+    console.error("Error getting incidents in range:", error);
+    return { success: false, error };
+  }
+};
+
+// Just the number of incidents in [start, end) - counted server-side, so the
+// report's "vs previous period" figure doesn't download a second period.
+export const countIncidentsInRange = async (
+  start: Date,
+  end: Date,
+  agency?: string,
+) => {
+  try {
+    const snapshot = await getCountFromServer(
+      incidentsInRangeQuery(start, end, agency),
+    );
+    return { success: true, data: snapshot.data().count };
+  } catch (error) {
+    console.error("Error counting incidents in range:", error);
     return { success: false, error };
   }
 };

@@ -28,6 +28,7 @@ export default function RealtimeCameraScreen() {
     useMicrophonePermissions();
   const [facing, setFacing] = useState<"back" | "front">("back");
   const [torchOn, setTorchOn] = useState(false);
+  const [cameraReady, setCameraReady] = useState(false);
   const [isRecording, setIsRecording] = useState(false);
   const [secondsLeft, setSecondsLeft] = useState(MAX_RECORDING_SECONDS);
   const cameraRef = React.useRef<CameraView>(null);
@@ -74,6 +75,7 @@ export default function RealtimeCameraScreen() {
       alignItems: "center",
       paddingTop: 110,
       zIndex: 10,
+      pointerEvents: "box-none",
     },
     recordingBadgeInner: {
       flexDirection: "row",
@@ -212,6 +214,7 @@ export default function RealtimeCameraScreen() {
 
   const toggleCameraFacing = () => {
     setTorchOn(false);
+    setCameraReady(false);
     setFacing((current) => (current === "back" ? "front" : "back"));
   };
 
@@ -240,7 +243,11 @@ export default function RealtimeCameraScreen() {
         console.warn("Could not copy recorded video, using original:", copyError);
       }
 
-      router.replace({
+      // Pop back to the report screen that opened the camera rather than
+      // replacing the camera with a fresh one - that would stack a second,
+      // blank form over the first and lose the location/injury level/agency
+      // already filled in. Falls back to a replace if there is no such screen.
+      router.dismissTo({
         pathname: "/capture-incident",
         params: { videoUri },
       });
@@ -269,7 +276,11 @@ export default function RealtimeCameraScreen() {
         </TouchableOpacity>
         <Text style={styles.headerTitle}>Record Incident Video</Text>
         {facing === "back" ? (
-          <TouchableOpacity onPress={() => setTorchOn((current) => !current)}>
+          <TouchableOpacity
+            onPress={() => setTorchOn((current) => !current)}
+            hitSlop={12}
+            accessibilityLabel={torchOn ? "Turn flashlight off" : "Turn flashlight on"}
+          >
             <Ionicons
               name={torchOn ? "flash" : "flash-off"}
               size={24}
@@ -282,6 +293,9 @@ export default function RealtimeCameraScreen() {
       </View>
 
       {isRecording && (
+        // Full-width overlay across the top, so let touches fall through to
+        // the header below it - otherwise it swallows taps on the flash
+        // button for the whole recording.
         <View style={styles.recordingBadge}>
           <View style={styles.recordingBadgeInner}>
             <View style={styles.recordingDot} />
@@ -297,7 +311,10 @@ export default function RealtimeCameraScreen() {
         style={styles.camera}
         facing={facing}
         mode="video"
-        enableTorch={facing === "back" && torchOn}
+        // Android can't switch the torch on before the camera has opened, so
+        // only send it once the camera reports ready (re-sent on each flip).
+        enableTorch={cameraReady && facing === "back" && torchOn}
+        onCameraReady={() => setCameraReady(true)}
         videoQuality="720p"
       />
 
