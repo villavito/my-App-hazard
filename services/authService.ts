@@ -1,6 +1,7 @@
 import {
   GoogleAuthProvider,
   createUserWithEmailAndPassword,
+  sendPasswordResetEmail,
   signInWithCredential,
   signInWithEmailAndPassword,
   signInWithPopup,
@@ -261,6 +262,24 @@ export const signInWithGooglePopup = async () => {
         "Google sign-in failed. Please try again.",
       ),
       code: error.code,
+    };
+  }
+};
+
+// Firebase emails the user a link to a page where they choose a new password.
+// Needs no backend, so it works on the free Spark plan. With email-enumeration
+// protection on (the default), it succeeds whether or not the account exists.
+export const sendResetEmail = async (email: string) => {
+  try {
+    await sendPasswordResetEmail(getAuthInstance(), email);
+    return { success: true as const };
+  } catch (error: any) {
+    return {
+      success: false as const,
+      error:
+        error?.code === "auth/invalid-email"
+          ? "Please enter a valid email address."
+          : friendlyAuthError(error?.code, "Failed to send the reset email."),
     };
   }
 };

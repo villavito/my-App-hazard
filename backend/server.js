@@ -1,9 +1,7 @@
 const crypto = require("crypto");
-const fs = require("fs");
 const path = require("path");
 const express = require("express");
 const cors = require("cors");
-const multer = require("multer");
 const nodemailer = require("nodemailer");
 // dotenv reads .env from the *working directory* by default, and
 // `npm run server` runs from the project root - so backend/.env (the SMTP and
@@ -19,53 +17,10 @@ const app = express();
 app.use(cors());
 app.use(express.json());
 
-// Incident videos are stored on local disk instead of Firebase Storage
-// (that product was never provisioned for this Firebase project) and served
-// back out as static files.
-const VIDEO_UPLOAD_DIR = path.join(__dirname, "uploads", "incident-videos");
-fs.mkdirSync(VIDEO_UPLOAD_DIR, { recursive: true });
-app.use("/uploads", express.static(path.join(__dirname, "uploads")));
-
-const videoUpload = multer({
-  storage: multer.diskStorage({
-    destination: (req, file, cb) => cb(null, VIDEO_UPLOAD_DIR),
-    // multer parses multipart fields in stream order, so this callback only
-    // sees req.body.incidentId if the client appended that field before the
-    // file field.
-    filename: (req, file, cb) => {
-      const incidentId = req.body.incidentId;
-      if (!incidentId || !/^[A-Za-z0-9_-]+$/.test(incidentId)) {
-        return cb(new Error("Missing or invalid incidentId"));
-      }
-      cb(null, `${incidentId}.mp4`);
-    },
-  }),
-  limits: { fileSize: 200 * 1024 * 1024 },
-  fileFilter: (req, file, cb) => {
-    if (file.mimetype !== "video/mp4" && !file.originalname.endsWith(".mp4")) {
-      return cb(new Error("Only .mp4 videos are allowed"));
-    }
-    cb(null, true);
-  },
-});
-
-app.post("/api/upload-video", (req, res) => {
-  videoUpload.single("video")(req, res, (err) => {
-    if (err) {
-      console.error("Video upload failed:", err.message);
-      return res.status(400).json({ success: false, error: err.message });
-    }
-    if (!req.file) {
-      return res
-        .status(400)
-        .json({ success: false, error: "No video file provided" });
-    }
-    res.json({
-      success: true,
-      path: `/uploads/incident-videos/${req.file.filename}`,
-    });
-  });
-});
+// Videos of older reports, uploaded to this dev server before videos moved
+// into Firestore (see utils/videoStore.ts), are still served from here.
+const UPLOAD_ROOT = path.join(__dirname, "uploads");
+app.use("/uploads", express.static(UPLOAD_ROOT));
 
 // In-memory store for password reset codes:
 // "email:<address>" | "phone:<+63...>" -> { uid, code, expiresAt, verified, attempts }

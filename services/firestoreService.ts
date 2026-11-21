@@ -19,6 +19,7 @@ import {
 } from "firebase/firestore";
 import { db } from "../config/firebase";
 import { AGENCIES, type Agency } from "../constants/agencies";
+import { deleteIncidentVideo } from "../utils/videoStore";
 
 // User Services
 export const createUserDocument = async (userData: any) => {
@@ -196,6 +197,73 @@ export const subscribeToActiveAgencies = (
     },
   );
 
+export type NewIncidentAlert = {
+  id: string;
+  category?: string;
+  description?: string;
+  injuryLevel?: string;
+  location?: string;
+  involvedAgency?: string;
+  userEmail?: string;
+  createdAt?: Timestamp;
+};
+
+// Calls `onNew` for each report sent after this starts listening - for the
+// given agencies, or every agency when `agencies` is null (super admins). Only
+// the newest few reports are watched, so it costs a handful of reads when it
+// starts and one per new report after that. Returns the unsubscribe function.
+export const subscribeToNewIncidents = (
+  agencies: readonly string[] | null,
+  onNew: (incident: NewIncidentAlert) => void,
+) => {
+  const newest = (...filters: ReturnType<typeof where>[]) =>
+    query(
+      collection(db, "incidents"),
+      ...filters,
+      orderBy("createdAt", "desc"),
+      limit(5),
+    );
+  const queries =
+    agencies === null
+      ? [newest()]
+      : agencies.map((agency) => newest(where("involvedAgency", "==", agency)));
+
+  const unsubscribes = queries.map((incidentsQuery) => {
+    // Newest createdAt already known. Taken from the server's first answer -
+    // a cached answer may lack reports that existed before this started,
+    // which would otherwise pop up as if they were new.
+    let newestSeen: number | null = null;
+    return onSnapshot(
+      incidentsQuery,
+      { includeMetadataChanges: true },
+      (snapshot) => {
+        const times = snapshot.docs.map(
+          (docSnap) => (docSnap.data().createdAt as Timestamp | null)?.toMillis() ?? 0,
+        );
+        if (newestSeen === null) {
+          if (!snapshot.metadata.fromCache) newestSeen = Math.max(0, ...times);
+          return;
+        }
+        for (const change of snapshot.docChanges()) {
+          if (change.type !== "added") continue;
+          const data = change.doc.data();
+          const createdMs = (data.createdAt as Timestamp | null)?.toMillis() ?? 0;
+          // Older reports also slide into the window when a newer one is
+          // deleted - only genuinely newer ones are announced.
+          if (createdMs > newestSeen) {
+            onNew({ ...(data as Omit<NewIncidentAlert, "id">), id: change.doc.id });
+          }
+        }
+        newestSeen = Math.max(newestSeen, ...times);
+      },
+      (error) => {
+        console.error("Error listening for new incident reports:", error);
+      },
+    );
+  });
+  return () => unsubscribes.forEach((unsubscribe) => unsubscribe());
+};
+
 export const setAgencyActive = async (agency: Agency) => {
   // The `agency: Agency` type only holds at compile time - this value
   // actually comes from a Firestore user doc (an untyped cast), so a bad
@@ -233,6 +301,25 @@ export const setAgencyInactive = async (agency: Agency) => {
     );
   } catch (error) {
     console.error("Error marking agency inactive:", error);
+  }
+};
+
+// How many of an agency's reports are still pending. Counted server-side (one
+// read per 1,000 matches), so the admin badge - polled while the dashboard is
+// open - neither downloads reports nor stops counting at the newest 50.
+export const countPendingIncidents = async (agency: string) => {
+  try {
+    const snapshot = await getCountFromServer(
+      query(
+        collection(db, "incidents"),
+        where("involvedAgency", "==", agency),
+        where("status", "==", "pending"),
+      ),
+    );
+    return { success: true as const, data: snapshot.data().count };
+  } catch (error) {
+    console.error("Error counting pending incidents:", error);
+    return { success: false as const, error };
   }
 };
 
@@ -436,6 +523,25 @@ export const getNotificationById = async (notificationId: string) => {
   }
 };
 
+// Whether the user has any unread notification. Counted server-side, so the
+// tab badge (polled while the app is open) costs one read instead of
+// downloading every notification.
+export const hasUnreadNotifications = async (userId: string) => {
+  try {
+    const snapshot = await getCountFromServer(
+      query(
+        collection(db, "notifications"),
+        where("userId", "==", userId),
+        where("read", "==", false),
+      ),
+    );
+    return { success: true as const, data: snapshot.data().count > 0 };
+  } catch (error) {
+    console.error("Error counting unread notifications:", error);
+    return { success: false as const, error };
+  }
+};
+
 export const getUserNotifications = async (userId: string) => {
   try {
     const notificationsQuery = query(
@@ -500,6 +606,14 @@ export const markAllNotificationsRead = async (userId: string) => {
 
 export const deleteIncidentReport = async (incidentId: string) => {
   try {
+    // The video first: deleting it is permission-checked against the
+    // incident, and it's what takes up the free plan's storage. A failure
+    // here shouldn't stop the report itself from being deleted.
+    try {
+      await deleteIncidentVideo(incidentId);
+    } catch (videoError) {
+      console.warn("Couldn't delete the incident's stored video:", videoError);
+    }
     const incidentRef = doc(db, "incidents", incidentId);
     await deleteDoc(incidentRef);
     return { success: true };

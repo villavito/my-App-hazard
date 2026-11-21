@@ -19,7 +19,7 @@ const {
 } = require("@firebase/rules-unit-testing");
 const fs = require("fs");
 const path = require("path");
-const { doc, getDoc, setDoc, updateDoc, deleteDoc, getDocs, collection, query, where } =
+const { doc, getDoc, setDoc, updateDoc, deleteDoc, getDocs, collection, query, where, Bytes } =
   require("firebase/firestore");
 
 const results = [];
@@ -298,6 +298,128 @@ async function run() {
   await check(
     "Admin with an agency CANNOT switch to another",
     assertFails(updateDoc(doc(bfpWithEmail, "users", "bfp-admin"), { agency: "PNP" })),
+  );
+
+  console.log("\nIncident videos stored in Firestore");
+  await testEnv.withSecurityRulesDisabled(async (ctx) => {
+    const db = ctx.firestore();
+    await setDoc(doc(db, "incidents", "reporter_100"), {
+      id: "reporter_100",
+      userId: "reporter",
+      userEmail: "reporter@example.com",
+      videoUrl: "firestore://incidentVideos/reporter_100",
+      category: "Theft / Robbery",
+      involvedAgency: "PNP",
+      location: "Zamboanga",
+      status: "pending",
+      createdAt: new Date(),
+    });
+    await setDoc(doc(db, "incidentVideos", "reporter_100"), {
+      ownerId: "reporter",
+      chunkCount: 1,
+      size: 3,
+      mimeType: "video/mp4",
+      createdAt: new Date(),
+    });
+    await setDoc(doc(db, "incidentVideos", "reporter_100", "chunks", "0"), {
+      index: 0,
+      data: Bytes.fromUint8Array(new Uint8Array([1, 2, 3])),
+    });
+  });
+  const chunk = (size, index = 0) => ({
+    index,
+    data: Bytes.fromUint8Array(new Uint8Array(size)),
+  });
+  const manifest = (fields) => ({
+    ownerId: "reporter",
+    chunkCount: 1,
+    size: 1000,
+    mimeType: "video/mp4",
+    createdAt: new Date(),
+    ...fields,
+  });
+  const stranger = testEnv.authenticatedContext("stranger").firestore();
+  const reporterVideo = (...path) => doc(reporter, "incidentVideos", ...path);
+
+  await check(
+    "Reporter CAN upload a chunk for its own new report",
+    assertSucceeds(setDoc(reporterVideo("reporter_200", "chunks", "0"), chunk(1000))),
+  );
+  await check(
+    "Reporter CAN save the manifest for its own new report",
+    assertSucceeds(
+      setDoc(reporterVideo("reporter_200"), manifest({ mimeType: "video/webm;codecs=vp9,opus" })),
+    ),
+  );
+  await check(
+    "Reporter CANNOT upload into someone else's report ID",
+    assertFails(setDoc(reporterVideo("stranger_200", "chunks", "0"), chunk(1000))),
+  );
+  await check(
+    "A chunk over 1,000,000 bytes is rejected",
+    assertFails(setDoc(reporterVideo("reporter_300", "chunks", "0"), chunk(1000001))),
+  );
+  await check(
+    "A chunk whose index doesn't match its ID is rejected",
+    assertFails(setDoc(reporterVideo("reporter_300", "chunks", "1"), chunk(10, 0))),
+  );
+  await check(
+    "A manifest claiming another owner is rejected",
+    assertFails(setDoc(reporterVideo("reporter_300"), manifest({ ownerId: "stranger" }))),
+  );
+  await check(
+    "A manifest over 25 MB is rejected",
+    assertFails(
+      setDoc(reporterVideo("reporter_300"), manifest({ chunkCount: 27, size: 26214401 })),
+    ),
+  );
+  await check(
+    "Reporter CANNOT overwrite an uploaded chunk",
+    assertFails(setDoc(reporterVideo("reporter_100", "chunks", "0"), chunk(5))),
+  );
+  await check(
+    "Reporter CAN watch its own video",
+    assertSucceeds(getDocs(collection(reporter, "incidentVideos", "reporter_100", "chunks"))),
+  );
+  await check(
+    "PNP admin CAN watch a PNP report's video",
+    assertSucceeds(getDocs(collection(pnp, "incidentVideos", "reporter_100", "chunks"))),
+  );
+  await check(
+    "PNP admin CAN read a PNP report's video manifest",
+    assertSucceeds(getDoc(doc(pnp, "incidentVideos", "reporter_100"))),
+  );
+  await check(
+    "BFP admin CANNOT watch a PNP report's video",
+    assertFails(getDocs(collection(bfp, "incidentVideos", "reporter_100", "chunks"))),
+  );
+  await check(
+    "Agencyless admin CANNOT watch it",
+    assertFails(getDoc(doc(noAgency, "incidentVideos", "reporter_100", "chunks", "0"))),
+  );
+  await check(
+    "Another user CANNOT watch it",
+    assertFails(getDoc(doc(stranger, "incidentVideos", "reporter_100", "chunks", "0"))),
+  );
+  await check(
+    "Anonymous CANNOT watch it",
+    assertFails(getDoc(doc(anon, "incidentVideos", "reporter_100", "chunks", "0"))),
+  );
+  await check(
+    "Super admin CAN watch it",
+    assertSucceeds(getDocs(collection(superAdmin, "incidentVideos", "reporter_100", "chunks"))),
+  );
+  await check(
+    "BFP admin CANNOT delete a PNP report's video",
+    assertFails(deleteDoc(doc(bfp, "incidentVideos", "reporter_100", "chunks", "0"))),
+  );
+  await check(
+    "PNP admin CAN delete a PNP report's video",
+    assertSucceeds(deleteDoc(doc(pnp, "incidentVideos", "reporter_100", "chunks", "0"))),
+  );
+  await check(
+    "Reporter CAN delete its own video",
+    assertSucceeds(deleteDoc(reporterVideo("reporter_200", "chunks", "0"))),
   );
 
   await testEnv.cleanup();

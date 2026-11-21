@@ -9,9 +9,13 @@ import { showAlert } from "../utils/crossPlatformAlert";
 // "not supported on web"), so this screen talks to the browser directly:
 // getUserMedia for the camera/mic stream and MediaRecorder to record it. The
 // result is handed back to the report screen as a blob: URL, which the web
-// upload path in capture-incident already fetches and sends to the server.
+// upload path in capture-incident fetches and saves.
 
 const MAX_RECORDING_SECONDS = 30;
+// Videos are stored in Firestore on the free plan (see utils/videoStore), so
+// they're kept small: ~1 Mbps is about 4 MB for 30 seconds.
+const VIDEO_BITS_PER_SECOND = 1_000_000;
+const AUDIO_BITS_PER_SECOND = 64_000;
 
 // Prefer MP4 (Chrome 126+, Safari) so the stored file matches its .mp4 name;
 // fall back to WebM where MP4 recording isn't available (Firefox).
@@ -156,7 +160,11 @@ export default function RealtimeCameraWebScreen() {
     const mimeType = pickMimeType();
     let recorder: MediaRecorder;
     try {
-      recorder = new MediaRecorder(stream, mimeType ? { mimeType } : undefined);
+      recorder = new MediaRecorder(stream, {
+        ...(mimeType ? { mimeType } : {}),
+        videoBitsPerSecond: VIDEO_BITS_PER_SECOND,
+        audioBitsPerSecond: AUDIO_BITS_PER_SECOND,
+      });
     } catch (error) {
       console.error("Error creating MediaRecorder:", error);
       showAlert("Error", "This browser couldn't start recording.");

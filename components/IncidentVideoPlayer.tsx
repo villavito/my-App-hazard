@@ -16,6 +16,7 @@ import {
   type ViewStyle,
 } from "react-native";
 import { getIncidentVideoUrlCandidates } from "../utils/incidentVideo";
+import { isStoredVideoUrl, useStoredVideoUri } from "../utils/videoStore";
 
 type IncidentVideoPlayerProps = {
   uri: string;
@@ -75,9 +76,11 @@ function VideoSourcePlayer({
     <View style={[style, styles.playerContainer]}>
       <VideoView
         player={player}
-        style={StyleSheet.absoluteFill}
+        style={styles.video}
         contentFit={contentFit ?? "contain"}
         nativeControls
+        // Admins reviewing evidence need to see portrait phone videos big.
+        fullscreenOptions={{ enable: true }}
         surfaceType={Platform.OS === "android" ? "textureView" : undefined}
       />
       {status === "loading" ? (
@@ -89,11 +92,81 @@ function VideoSourcePlayer({
   );
 }
 
-export function IncidentVideoPlayer({
-  uri,
+function VideoErrorView({
   style,
-  contentFit,
-}: IncidentVideoPlayerProps) {
+  message,
+  onRetry,
+}: {
+  style: StyleProp<ViewStyle>;
+  message: string;
+  onRetry?: () => void;
+}) {
+  return (
+    <View style={[style, styles.errorContainer]}>
+      <Ionicons name="videocam-off-outline" size={32} color="#fff" />
+      <Text style={styles.errorText}>{message}</Text>
+      {onRetry ? (
+        <TouchableOpacity
+          onPress={onRetry}
+          accessibilityRole="button"
+          accessibilityLabel="Retry video playback"
+        >
+          <Text style={styles.retryText}>Retry</Text>
+        </TouchableOpacity>
+      ) : null}
+    </View>
+  );
+}
+
+// A video saved in Firestore (see utils/videoStore): downloaded first, then
+// played from the local copy.
+function StoredVideoPlayer({ uri, style, contentFit }: IncidentVideoPlayerProps) {
+  const { uri: playableUri, error, retry } = useStoredVideoUri(uri);
+  const [playbackError, setPlaybackError] = useState<string | null>(null);
+
+  const message = error ?? playbackError;
+  if (message) {
+    return (
+      <VideoErrorView
+        style={style}
+        message={message}
+        onRetry={() => {
+          setPlaybackError(null);
+          retry();
+        }}
+      />
+    );
+  }
+  if (!playableUri) {
+    return (
+      <View style={[style, styles.errorContainer]}>
+        <ActivityIndicator color="#fff" />
+        <Text style={styles.errorText}>Loading video…</Text>
+      </View>
+    );
+  }
+  return (
+    <VideoSourcePlayer
+      key={playableUri}
+      uri={playableUri}
+      style={style}
+      contentFit={contentFit}
+      onError={setPlaybackError}
+    />
+  );
+}
+
+export function IncidentVideoPlayer(props: IncidentVideoPlayerProps) {
+  return isStoredVideoUrl(props.uri) ? (
+    <StoredVideoPlayer {...props} />
+  ) : (
+    <UrlVideoPlayer {...props} />
+  );
+}
+
+// A video at a plain URL (reports from before Firestore storage), tried at
+// each address the backend might be reachable on.
+function UrlVideoPlayer({ uri, style, contentFit }: IncidentVideoPlayerProps) {
   const candidates = getIncidentVideoUrlCandidates(uri);
   const [failedSource, setFailedSource] = useState<{
     uri: string;
@@ -130,23 +203,15 @@ export function IncidentVideoPlayer({
   }
 
   return (
-    <View style={[style, styles.errorContainer]}>
-      <Ionicons name="videocam-off-outline" size={32} color="#fff" />
-      <Text style={styles.errorText}>
-        {allSourcesFailed
+    <VideoErrorView
+      style={style}
+      message={
+        allSourcesFailed
           ? failedSource.message
-          : "No playable video URL is available."}
-      </Text>
-      {allSourcesFailed ? (
-        <TouchableOpacity
-          onPress={() => setFailedSource(null)}
-          accessibilityRole="button"
-          accessibilityLabel="Retry video playback"
-        >
-          <Text style={styles.retryText}>Retry</Text>
-        </TouchableOpacity>
-      ) : null}
-    </View>
+          : "No playable video URL is available."
+      }
+      onRetry={allSourcesFailed ? () => setFailedSource(null) : undefined}
+    />
   );
 }
 
@@ -154,6 +219,15 @@ const styles = StyleSheet.create({
   playerContainer: {
     overflow: "hidden",
     backgroundColor: "#000",
+  },
+  // On the web the style goes straight onto a <video> element, which, unlike
+  // a View, ignores top/right/bottom/left and keeps the video's own size: a
+  // 720x1280 phone video overflowed the box, so only its top showed and the
+  // play controls at its bottom were cut off. Explicit 100% sizes fit it.
+  video: {
+    ...StyleSheet.absoluteFill,
+    width: "100%",
+    height: "100%",
   },
   loadingOverlay: {
     ...StyleSheet.absoluteFill,

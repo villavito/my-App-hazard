@@ -12,10 +12,11 @@ import {
   View,
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
+import { NewReportAlert } from "../../components/NewReportAlert";
 import { AGENCIES, AGENCY_COLORS } from "../../constants/agencies";
 import { useAuth } from "../../contexts/AuthContext";
 import { signOutUser } from "../../services/authService";
-import { getIncidentsByAgency } from "../../services/firestoreService";
+import { countPendingIncidents } from "../../services/firestoreService";
 
 const { width: SCREEN_WIDTH } = Dimensions.get("window");
 const SIDEBAR_WIDTH = SCREEN_WIDTH * 0.75;
@@ -40,6 +41,8 @@ export default function AdminLayout() {
   const [expandedMenus, setExpandedMenus] = useState<string[]>([]);
   const [profileDropdownOpen, setProfileDropdownOpen] = useState(false);
   const [pendingCount, setPendingCount] = useState(0);
+  // Bumped when a new report pops up, so the badge recounts right away.
+  const [pendingRefresh, setPendingRefresh] = useState(0);
 
   // Mirrors the scoping in admin/incidents.tsx: only super admins count every
   // agency. An admin with no agency assigned counts nothing rather than
@@ -57,21 +60,20 @@ export default function AdminLayout() {
     if (!user) return;
 
     const checkPending = () => {
-      Promise.all(visibleAgencies.map((agency) => getIncidentsByAgency(agency))).then(
+      Promise.all(visibleAgencies.map((agency) => countPendingIncidents(agency))).then(
         (results) => {
-          const count = results
-            .filter((result) => result.success && result.data)
-            .flatMap((result) => result.data as any[])
-            .filter((i) => (i.status || "pending") === "pending").length;
-          setPendingCount(count);
+          setPendingCount(
+            results.reduce((sum, result) => sum + (result.success ? result.data : 0), 0),
+          );
         }
       );
     };
 
     checkPending();
-    const interval = setInterval(checkPending, 30000);
+    // Once a minute: each check costs a read per agency on the free plan.
+    const interval = setInterval(checkPending, 60000);
     return () => clearInterval(interval);
-  }, [JSON.stringify(visibleAgencies), user]);
+  }, [JSON.stringify(visibleAgencies), user, pendingRefresh]);
 
   const toggleMenu = (label: string) => {
     setExpandedMenus((prev) =>
@@ -457,7 +459,7 @@ export default function AdminLayout() {
             color={isDark ? "#fff" : "#333"}
           />
         </TouchableOpacity>
-        <Text style={styles.headerTitle}>Admin Dashbord</Text>
+        <Text style={styles.headerTitle}>Admin Dashboard</Text>
         <TouchableOpacity
           style={styles.bellButton}
           onPress={() => router.push("/admin/incidents")}
@@ -604,6 +606,12 @@ export default function AdminLayout() {
           headerShown: false,
           animation: "slide_from_right",
         }}
+      />
+
+      {/* Pops up over any admin page when a new report arrives. */}
+      <NewReportAlert
+        agencies={!user ? [] : isSuperAdmin ? null : visibleAgencies}
+        onNewReport={() => setPendingRefresh((n) => n + 1)}
       />
     </View>
   );

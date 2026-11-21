@@ -64,9 +64,17 @@ export default function MyReportsScreen() {
     });
   }, [user]);
 
-  const removeReport = (id: string) => {
+  const removeReport = async (id: string) => {
     setReports((prev) => prev.filter((r) => r.id !== id));
-    deleteIncidentReport(id);
+    const result = await deleteIncidentReport(id);
+    if (!result.success) {
+      // It still exists - show the real list again instead of hiding it.
+      if (user) {
+        const fresh = await getUserIncidents(user.uid);
+        if (fresh.success && fresh.data) setReports(fresh.data as MyIncident[]);
+      }
+      showAlert("Delete Failed", "Couldn't delete this report. Please try again.");
+    }
   };
 
   const handleLongPress = (item: MyIncident) => {
@@ -78,7 +86,7 @@ export default function MyReportsScreen() {
         {
           text: "Delete",
           style: "destructive",
-          onPress: () => removeReport(item.id),
+          onPress: () => void removeReport(item.id),
         },
       ],
     );

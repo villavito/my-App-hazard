@@ -3,7 +3,6 @@ import { useLocalSearchParams, useRouter } from "expo-router";
 import React, { useEffect, useState } from "react";
 import {
   ActivityIndicator,
-  Dimensions,
   Linking,
   Platform,
   ScrollView,
@@ -22,16 +21,20 @@ import {
   updateIncidentStatus,
 } from "../../services/firestoreService";
 import { showAlert } from "../../utils/crossPlatformAlert";
+import { isStoredVideoUrl } from "../../utils/videoStore";
 
-const { width: SCREEN_WIDTH } = Dimensions.get("window");
 
 // A report saved before video upload was restored (or one that never
 // reached the backend) can have a file:// path that only ever existed on
 // the reporting phone. Passing that into useVideoPlayer() can throw
 // synchronously trying to open a path that doesn't exist on this device at
-// all, so only ever hand it a fetchable URL.
-function isRemoteVideoUrl(uri: string): boolean {
-  return uri.startsWith("http://") || uri.startsWith("https://");
+// all, so only ever hand it a fetchable URL - or a video stored in Firestore.
+function isPlayableVideoUrl(uri: string): boolean {
+  return (
+    uri.startsWith("http://") ||
+    uri.startsWith("https://") ||
+    isStoredVideoUrl(uri)
+  );
 }
 
 type Incident = {
@@ -64,7 +67,7 @@ export default function IncidentDetailScreen() {
   const [postingComment, setPostingComment] = useState(false);
 
   const playableVideoUrl =
-    incident?.videoUrl && isRemoteVideoUrl(incident.videoUrl)
+    incident?.videoUrl && isPlayableVideoUrl(incident.videoUrl)
       ? incident.videoUrl
       : null;
   useEffect(() => {

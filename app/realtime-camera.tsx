@@ -7,21 +7,23 @@ import {
 import { useRouter } from "expo-router";
 import React, { useEffect, useState } from "react";
 import {
+  Platform,
   StyleSheet,
   Text,
   TouchableOpacity,
-  useColorScheme,
   View,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { showAlert } from "../utils/crossPlatformAlert";
 import { copyVideoToCache } from "../utils/localVideoFile";
+import { MAX_VIDEO_BYTES } from "../utils/videoStore";
 
 const MAX_RECORDING_SECONDS = 30;
+// Videos are stored in Firestore on the free plan (see utils/videoStore), so
+// they're kept small: 480p at ~1 Mbps is about 4 MB for 30 seconds.
+const VIDEO_BITRATE = 1_000_000;
 
 export default function RealtimeCameraScreen() {
-  const colorScheme = useColorScheme();
-  const isDark = colorScheme === "dark";
   const router = useRouter();
   const [permission, requestPermission] = useCameraPermissions();
   const [microphonePermission, requestMicrophonePermission] =
@@ -225,6 +227,9 @@ export default function RealtimeCameraScreen() {
       setIsRecording(true);
       const video = await cameraRef.current.recordAsync({
         maxDuration: MAX_RECORDING_SECONDS,
+        maxFileSize: MAX_VIDEO_BYTES,
+        // iOS only applies videoBitrate when a codec is chosen.
+        ...(Platform.OS === "ios" ? { codec: "avc1" as const } : {}),
       });
 
       if (!video?.uri) {
@@ -315,7 +320,8 @@ export default function RealtimeCameraScreen() {
         // only send it once the camera reports ready (re-sent on each flip).
         enableTorch={cameraReady && facing === "back" && torchOn}
         onCameraReady={() => setCameraReady(true)}
-        videoQuality="720p"
+        videoQuality="480p"
+        videoBitrate={VIDEO_BITRATE}
       />
 
       <View style={styles.buttonContainer}>

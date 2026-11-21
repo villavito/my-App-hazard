@@ -3,7 +3,7 @@ import { Tabs } from "expo-router";
 import { useEffect, useState } from "react";
 import { useColorScheme, View } from "react-native";
 import { useAuth } from "../../contexts/AuthContext";
-import { getUserNotifications } from "../../services/firestoreService";
+import { hasUnreadNotifications } from "../../services/firestoreService";
 
 export default function TabLayout() {
   const colorScheme = useColorScheme();
@@ -18,15 +18,14 @@ export default function TabLayout() {
     }
 
     const checkUnread = () => {
-      getUserNotifications(user.uid).then((result) => {
-        if (result.success && result.data) {
-          setHasUnread((result.data as any[]).some((n) => !n.read));
-        }
+      hasUnreadNotifications(user.uid).then((result) => {
+        if (result.success) setHasUnread(result.data);
       });
     };
 
     checkUnread();
-    const interval = setInterval(checkUnread, 30000);
+    // Once a minute: each check costs a read on the free plan.
+    const interval = setInterval(checkUnread, 60000);
     return () => clearInterval(interval);
   }, [user]);
 

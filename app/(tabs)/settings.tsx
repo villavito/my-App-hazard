@@ -36,6 +36,13 @@ export default function SettingsScreen() {
       route: "/profile",
     },
     {
+      // The Help Center sends people here ("Settings > Change Password").
+      icon: "key-outline",
+      label: "Change Password",
+      type: "link",
+      route: "/change-password",
+    },
+    {
       icon: "shield-checkmark-outline",
       label: "Privacy & Security",
       type: "link",

@@ -8,6 +8,11 @@ export function getIncidentVideoUrlCandidates(videoUrl: string): string[] {
     }
 
     const candidates = [savedUrl.href];
+    // Only videos stored on the backend's own disk can be re-pointed at
+    // another backend address; Firebase Storage URLs are already permanent.
+    if (!savedUrl.pathname.startsWith("/uploads/")) {
+      return candidates;
+    }
     for (const baseUrl of API_BASE_URL_CANDIDATES) {
       const base = new URL(baseUrl);
       candidates.push(

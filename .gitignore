@@ -53,9 +53,15 @@ app-example
 /ios
 /android
 
-# firebase emulator state
+# firebase emulator state and the CLI's deploy cache
 .emulator-data/
+.firebase/
 firebase-debug.log
 firestore-debug.log
 ui-debug.log
 storage-debug.log
+
+# Android release signing (scripts/buildAndroidRelease.js) - never commit
+keystore.properties
+credentials/
+release/

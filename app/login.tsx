@@ -1,7 +1,7 @@
 import { Ionicons } from "@expo/vector-icons";
 import Constants, { AppOwnership } from "expo-constants";
 import { useRouter } from "expo-router";
-import { useCallback, useState } from "react";
+import { useCallback, useState, useSyncExternalStore } from "react";
 import {
   ActivityIndicator,
   Platform,
@@ -23,8 +23,15 @@ import {
   signInWithGoogleToken,
 } from "../services/authService";
 import { showAlert } from "../utils/crossPlatformAlert";
+import { isInAppBrowser, openInRealBrowser } from "../utils/inAppBrowser";
 
 let googleSigninConfigured = false;
+
+// The URL's ?google flag never changes while the page is open.
+const subscribeToNothing = () => () => {};
+const hasGoogleHandoffFlag = () =>
+  Platform.OS === "web" &&
+  new URLSearchParams(window.location.search).has("google");
 
 export default function LoginScreen() {
   const colorScheme = useColorScheme();
@@ -34,6 +41,14 @@ export default function LoginScreen() {
   const [showPassword, setShowPassword] = useState(false);
   const [loading, setLoading] = useState(false);
   const [googleLoading, setGoogleLoading] = useState(false);
+  // True when Messenger/Facebook's built-in browser handed this screen over
+  // to the real browser for Google sign-in (see handleGoogleLogin). The page
+  // is pre-rendered at build time without the URL, hence the server value.
+  const showGoogleHint = useSyncExternalStore(
+    subscribeToNothing,
+    hasGoogleHandoffFlag,
+    () => false,
+  );
   const router = useRouter();
   const { refreshUserRole } = useAuth();
   const isExpoGo = Constants.appOwnership === AppOwnership.Expo;
@@ -178,6 +193,13 @@ export default function LoginScreen() {
       fontWeight: "600",
       marginLeft: 10,
     },
+    googleHintText: {
+      color: "#007AFF",
+      fontSize: 15,
+      fontWeight: "600",
+      textAlign: "center",
+      marginTop: 16,
+    },
     googleSetupText: {
       color: isDark ? "#aaa" : "#666",
       fontSize: 13,
@@ -271,6 +293,22 @@ export default function LoginScreen() {
 
   const handleGoogleLogin = () => {
     if (Platform.OS === "web") {
+      // Google refuses OAuth inside in-app browsers (Messenger, Facebook,
+      // Instagram, LINE, TikTok...) and shows a bare "400 malformed" page, so
+      // reopen this screen in the phone's real browser instead, where the
+      // `google` flag tells the user to tap the button once more (the Google
+      // popup needs a fresh tap there).
+      if (isInAppBrowser()) {
+        void openInRealBrowser("/login?google=1").then((handedOff) => {
+          if (!handedOff) {
+            showAlert(
+              "Open in your browser",
+              "Google sign-in doesn't work inside this app's built-in browser. Tap the ••• (or ⋮) menu at the top and choose \"Open in browser\" (Chrome or Safari), then tap Continue with Google again. You can also sign in with email and password here.",
+            );
+          }
+        });
+        return;
+      }
       setLoading(true);
       setGoogleLoading(true);
       void (async () => {
@@ -433,6 +471,12 @@ export default function LoginScreen() {
           <Text style={styles.dividerText}>or</Text>
           <View style={styles.dividerLine} />
         </View>
+
+        {showGoogleHint ? (
+          <Text style={styles.googleHintText}>
+            Tap “Continue with Google” below to finish signing in.
+          </Text>
+        ) : null}
 
         <TouchableOpacity
           style={[

@@ -1,22 +1,15 @@
 import Constants from 'expo-constants';
 import { Platform } from 'react-native';
 
-// TEMPORARY: a public tunnel (`npx cloudflared tunnel --url http://localhost:3001`)
-// to the dev machine's backend, for testing on a phone whose Wi-Fi/hotspot
-// isolates clients from each other so the LAN candidates below can never
-// work no matter how correctly the dev machine is configured. This URL dies
-// when the tunnel process is stopped or the terminal running it closes -
-// when that happens, either start a new tunnel and update this constant, or
-// clear it back to '' once the device is back on a real shared network.
-const TUNNEL_URL = 'https://peoples-lbs-elements-selection.trycloudflare.com/api';
-
-// The backend (backend/server.js) runs on the dev machine at port 3001.
+// The backend (backend/server.js) only runs on the dev machine, at port 3001:
+// the live app has none (Firebase's free plan can't host one), and everything
+// it needs works without one. In development it still sends agency emails and
+// SMS reset codes.
+//
 // There's no single host alias that reaches it from every dev target - a
 // physical device needs the PC's actual LAN IP, a standard Android Studio
 // emulator needs 10.0.2.2, Genymotion needs 10.0.3.2, and a browser/iOS
-// simulator needs localhost - so instead of guessing one, every candidate
-// is exposed and callers that need reliability (e.g. video upload) should
-// try them in order until one connects.
+// simulator needs localhost - so every candidate is tried in order.
 function candidateHosts(): string[] {
   // Expo's dev server already knows the dev machine's LAN IP (it's how this
   // JS bundle got loaded in the first place) and exposes it as hostUri.
@@ -36,32 +29,29 @@ function candidateHosts(): string[] {
   return Array.from(new Set(hosts));
 }
 
-// LAN candidates go first: a direct connection is faster than relaying the
-// whole video through the public tunnel, and on a shared network it usually
-// works. The tunnel stays as the last-resort fallback for when the device's
-// Wi-Fi/hotspot isolates clients from each other and no LAN candidate can
-// ever connect.
-export const API_BASE_URL_CANDIDATES = [
-  ...candidateHosts().map((host) => `http://${host}:3001/api`),
-  ...(TUNNEL_URL ? [TUNNEL_URL] : []),
-];
+// A deployed backend, if you ever host one: set EXPO_PUBLIC_API_URL (e.g.
+// https://example.com/api) in .env.local. When set, it is the only address
+// used - the dev-machine guessing above is skipped.
+const PRODUCTION_API_URL = (process.env.EXPO_PUBLIC_API_URL ?? '')
+  .trim()
+  .replace(/\/+$/, '');
 
-// Kept for call sites where a single best-guess URL is fine (e.g.
-// best-effort requests already wrapped in try/catch, with no retry loop of
-// their own). Unlike the candidates list above, this prefers the tunnel URL
-// when one is configured: a single-shot caller only gets one attempt, and
-// the tunnel is the only candidate that works from every network (that's
-// the whole reason it exists - see the comment on TUNNEL_URL), whereas a
-// LAN guess can silently fail on an isolated Wi-Fi/hotspot with no fallback.
-export const API_BASE_URL = TUNNEL_URL || API_BASE_URL_CANDIDATES[0];
+// Whether a backend server exists at all: a deployed one, or the dev
+// machine's during development. The live web app has none.
+export const HAS_BACKEND = Boolean(PRODUCTION_API_URL) || __DEV__;
+
+export const API_BASE_URL_CANDIDATES = PRODUCTION_API_URL
+  ? [PRODUCTION_API_URL]
+  : HAS_BACKEND
+    ? candidateHosts().map((host) => `http://${host}:3001/api`)
+    : [];
 
 const BACKEND_TIMEOUT_MS = 20000;
 
 // POSTs JSON to the backend, trying each candidate address in turn until one
-// answers - a single fixed URL broke whenever the temporary tunnel died or
-// the phone was on a different network. Only a failure to *connect* moves on
-// to the next address; any HTTP response (even an error status) is returned
-// as-is, so a request is never sent twice to a server that received it.
+// answers. Only a failure to *connect* moves on to the next address; any HTTP
+// response (even an error status) is returned as-is, so a request is never
+// sent twice to a server that received it.
 export async function postToBackend(
   path: string,
   body: unknown,

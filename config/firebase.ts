@@ -52,7 +52,7 @@ export function getAuthInstance(): Auth {
 
 if (typeof window !== "undefined" && typeof document !== "undefined") {
   try {
-    // eslint-disable-next-line @typescript-eslint/no-var-requires
+    // eslint-disable-next-line @typescript-eslint/no-require-imports
     const { getAnalytics } = require("firebase/analytics");
     getAnalytics(app);
   } catch {

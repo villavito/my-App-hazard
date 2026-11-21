@@ -71,7 +71,6 @@ async function run() {
   }
 
   for (const u of users) {
-    // eslint-disable-next-line no-await-in-loop
     await ensureUser(u);
   }
 

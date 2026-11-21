@@ -119,6 +119,51 @@ service cloud.firestore {
         request.resource.data.involvedAgency in ['PNP', 'BFP', 'LDRRMC', 'Barangay', 'REDCROSS'];
     }
 
+    // Incident videos live in Firestore itself - Cloud Storage needs the paid
+    // Blaze plan. Each is a manifest doc plus the video's bytes split across
+    // chunk docs of at most 1,000,000 bytes (Firestore caps a doc at 1 MiB),
+    // up to 25 MiB per video (see utils/videoStore.ts). The video is uploaded
+    // before its incident doc exists, so ownership comes from the incident ID
+    // itself, "<uid>_<timestamp>". Videos are never edited, only replaced by
+    // a new report, so there is no update rule.
+    match /incidentVideos/{incidentId} {
+      function isUploader() {
+        return request.auth != null &&
+          incidentId.split('_')[0] == request.auth.uid;
+      }
+
+      // Same audience as the incident: its reporter, super admins, and admins
+      // of the agency it was sent to.
+      function canAccess() {
+        return isUploader() || isSuperAdmin() ||
+          (isAdmin() && callerAgency() ==
+            get(/databases/$(database)/documents/incidents/$(incidentId)).data.involvedAgency);
+      }
+
+      allow read, delete: if canAccess();
+      allow create: if isUploader() &&
+        request.resource.data.keys().hasOnly(['ownerId', 'chunkCount', 'size', 'mimeType', 'createdAt']) &&
+        request.resource.data.ownerId == request.auth.uid &&
+        request.resource.data.chunkCount is int &&
+        request.resource.data.chunkCount > 0 &&
+        request.resource.data.chunkCount <= 27 &&
+        request.resource.data.size is int &&
+        request.resource.data.size <= 26214400 &&
+        request.resource.data.mimeType is string &&
+        request.resource.data.mimeType.matches('video/.*');
+
+      match /chunks/{chunkId} {
+        allow read, delete: if canAccess();
+        allow create: if isUploader() &&
+          chunkId.matches('[0-9]{1,2}') &&
+          request.resource.data.keys().hasOnly(['index', 'data']) &&
+          request.resource.data.index is int &&
+          string(request.resource.data.index) == chunkId &&
+          request.resource.data.data is bytes &&
+          request.resource.data.data.size() <= 1000000;
+      }
+    }
+
     match /notifications/{notificationId} {
       allow read, update, delete: if request.auth != null && request.auth.uid == resource.data.userId;
       allow create: if request.auth != null && isAdmin();

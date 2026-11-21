@@ -1,5 +1,4 @@
 import { Ionicons } from "@expo/vector-icons";
-import { type File, UploadTask, UploadType } from "expo-file-system";
 import * as ImagePicker from "expo-image-picker";
 import * as Location from "expo-location";
 import { useLocalSearchParams, useRouter } from "expo-router";
@@ -19,7 +18,8 @@ import {
     View,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
-import { API_BASE_URL_CANDIDATES } from "../config/api";
+import { isEmailJsConfigured, sendAgencyEmail } from "../config/agencyEmail";
+import { HAS_BACKEND, postToBackend } from "../config/api";
 import { db } from "../config/firebase";
 import { AGENCIES, type Agency } from "../constants/agencies";
 import { INCIDENT_CATEGORIES } from "../constants/incidentCategories";
@@ -28,21 +28,12 @@ import { useAuth } from "../contexts/AuthContext";
 import { subscribeToActiveAgencies } from "../services/firestoreService";
 import { showAlert } from "../utils/crossPlatformAlert";
 import { copyVideoToCache, resolveLocalFile } from "../utils/localVideoFile";
-
-async function isBackendReachable(baseUrl: string): Promise<boolean> {
-  const controller = new AbortController();
-  const timeoutId = setTimeout(() => controller.abort(), 3000);
-  try {
-    const response = await fetch(`${baseUrl}/health`, {
-      signal: controller.signal,
-    });
-    return response.ok;
-  } catch {
-    return false;
-  } finally {
-    clearTimeout(timeoutId);
-  }
-}
+import {
+  deleteIncidentVideo,
+  MAX_VIDEO_BYTES,
+  saveIncidentVideo,
+  videoTooLargeMessage,
+} from "../utils/videoStore";
 
 // Each option row is ~48px (14px padding top/bottom + text + divider). Capping
 // the list at 4.5 rows makes it scroll as soon as there are more than four
@@ -579,7 +570,14 @@ export default function CaptureIncidentScreen() {
       });
 
       if (!result.canceled && result.assets[0]) {
-        const pickedUri = result.assets[0].uri;
+        const asset = result.assets[0];
+        // Caught here rather than after the whole form is filled in.
+        const size = asset.fileSize ?? asset.file?.size;
+        if (size && size > MAX_VIDEO_BYTES) {
+          showAlert("Video Too Large", videoTooLargeMessage(size));
+          return;
+        }
+        const pickedUri = asset.uri;
         // Same stable copy as recorded videos get - see copyVideoToCache.
         if (Platform.OS === "web") {
           setVideo(pickedUri);
@@ -749,17 +747,15 @@ export default function CaptureIncidentScreen() {
   // tap could otherwise start two uploads and file the same report twice.
   const submitInFlight = useRef(false);
 
+  // Reads the recorded or picked video and saves it in Firestore (see
+  // utils/videoStore), returning the videoUrl to store on the incident.
   const uploadVideoToStorage = async (
     localUri: string,
     incidentId: string,
+    ownerId: string,
   ): Promise<string> => {
-    // On web the browser owns the file, so it goes up through a regular
-    // FormData/XHR request. On Android/iOS it goes through expo-file-system's
-    // native UploadTask instead: React Native's {uri,name,type} FormData trick
-    // stopped sending files after the Expo SDK 57 / React Native 0.86 upgrade,
-    // failing with a bare "network error" even with the server reachable.
-    let webFormData: FormData | null = null;
-    let nativeFile: File | null = null;
+    let bytes: Uint8Array;
+    let mimeType: string;
 
     if (Platform.OS === "web") {
       const response = await fetch(localUri);
@@ -768,135 +764,34 @@ export default function CaptureIncidentScreen() {
           `Unable to read the local video file (${response.status}).`,
         );
       }
-      webFormData = new FormData();
-      webFormData.append("incidentId", incidentId);
-      webFormData.append("video", await response.blob(), `${incidentId}.mp4`);
+      const blob = await response.blob();
+      if (blob.size > MAX_VIDEO_BYTES) {
+        throw new Error(videoTooLargeMessage(blob.size));
+      }
+      bytes = new Uint8Array(await blob.arrayBuffer());
+      mimeType = blob.type || "video/mp4";
     } else {
-      console.log("Uploading video file:", localUri);
-      nativeFile = resolveLocalFile(localUri);
-      if (!nativeFile) {
+      const file = resolveLocalFile(localUri);
+      if (!file) {
         throw new Error(
           "The video file is no longer on this phone. Record or choose the video again.",
         );
       }
+      // Checked before reading it all into memory.
+      if (file.size > MAX_VIDEO_BYTES) {
+        throw new Error(videoTooLargeMessage(file.size));
+      }
+      bytes = await file.bytes();
+      mimeType = file.type || "video/mp4";
     }
 
-    const parseUploadResponse = (status: number, body: string): string => {
-      if (status < 200 || status >= 300) {
-        console.error(`Video upload FAILED: ${status} ${body}`);
-        throw new Error(`Upload failed with status ${status}`);
-      }
-      try {
-        return (JSON.parse(body) as { path: string }).path;
-      } catch {
-        throw new Error("Invalid response from upload server");
-      }
-    };
-
-    const sendNative = async (file: File, uploadUrl: string) => {
-      const task = new UploadTask(file, uploadUrl, {
-        httpMethod: "POST",
-        uploadType: UploadType.MULTIPART,
-        fieldName: "video",
-        mimeType: "video/mp4",
-        // Sent before the file part - the backend needs incidentId first to
-        // name the saved file.
-        parameters: { incidentId },
-        onProgress: ({ bytesSent, totalBytes }) => {
-          if (totalBytes > 0) {
-            setUploadProgress(Math.round((bytesSent / totalBytes) * 100));
-          }
-        },
-      });
-      // Generous, since a phone video can be tens of MB and a public tunnel
-      // relays it through an extra hop.
-      const timeoutId = setTimeout(() => task.cancel(), 120000);
-      try {
-        const result = await task.uploadAsync();
-        return parseUploadResponse(result.status, result.body);
-      } finally {
-        clearTimeout(timeoutId);
-      }
-    };
-
-    const sendWeb = (formData: FormData, uploadUrl: string) =>
-      new Promise<string>((resolve, reject) => {
-        const xhr = new XMLHttpRequest();
-        xhr.open("POST", uploadUrl);
-        xhr.timeout = 120000;
-        xhr.upload.onprogress = (event) => {
-          if (event.lengthComputable) {
-            setUploadProgress(Math.round((event.loaded / event.total) * 100));
-          }
-        };
-        xhr.onload = () => {
-          try {
-            resolve(parseUploadResponse(xhr.status, xhr.responseText));
-          } catch (error) {
-            reject(error);
-          }
-        };
-        xhr.onerror = () =>
-          reject(new Error(`Network error uploading to ${uploadUrl}`));
-        xhr.ontimeout = () =>
-          reject(new Error(`Timed out uploading to ${uploadUrl}`));
-        xhr.send(formData);
-      });
-
-    let lastError: Error | null = null;
-
-    // A failure is often just bad timing (dev server mid-restart, a brief
-    // Wi-Fi hiccup) rather than the backend genuinely being unreachable, so
-    // the whole candidate list gets a few passes with a growing pause
-    // between them before giving up.
-    const MAX_ROUNDS = 3;
-
-    for (let round = 1; round <= MAX_ROUNDS; round += 1) {
-      for (const baseUrl of API_BASE_URL_CANDIDATES) {
-        const uploadUrl = `${baseUrl}/upload-video`;
-
-        // Check the host first so dead candidates (emulator-only IPs, an
-        // expired tunnel) are skipped in seconds instead of each getting a
-        // full video upload attempt.
-        if (!(await isBackendReachable(baseUrl))) {
-          console.warn(`Backend not reachable at ${baseUrl}, skipping`);
-          lastError = new Error(`Backend not reachable at ${baseUrl}`);
-          continue;
-        }
-
-        console.log(`Video upload attempt (round ${round}) -> ${uploadUrl}`);
-        setUploadProgress(0);
-
-        try {
-          const relativePath = nativeFile
-            ? await sendNative(nativeFile, uploadUrl)
-            : await sendWeb(webFormData as FormData, uploadUrl);
-
-          console.log(`Video upload succeeded via ${baseUrl}`);
-          return `${baseUrl.replace(/\/api$/, "")}${relativePath}`;
-        } catch (error) {
-          lastError = error instanceof Error ? error : new Error(String(error));
-          console.warn(
-            `Upload attempt failed, trying next host:`,
-            lastError.message,
-          );
-        }
-      }
-
-      if (round < MAX_ROUNDS) {
-        const delayMs = round * 1500;
-        console.warn(
-          `All hosts failed on round ${round}, retrying in ${delayMs}ms...`,
-        );
-        await new Promise((resolve) => setTimeout(resolve, delayMs));
-      }
-    }
-
-    throw new Error(
-      `Couldn't reach the backend on any known address after ${MAX_ROUNDS} attempts ` +
-        `(tried: ${API_BASE_URL_CANDIDATES.join(", ")}). ` +
-        `Make sure "npm run server" is running on the dev machine and the device is on the same network.` +
-        (lastError ? `\nLast error: ${lastError.message}` : ""),
+    setUploadProgress(0);
+    return saveIncidentVideo(
+      incidentId,
+      ownerId,
+      bytes,
+      mimeType,
+      setUploadProgress,
     );
   };
 
@@ -942,7 +837,7 @@ export default function CaptureIncidentScreen() {
     setUploadProgress(0);
     try {
       const incidentId = `${user.uid}_${Date.now()}`;
-      const videoUrl = await uploadVideoToStorage(video, incidentId);
+      const videoUrl = await uploadVideoToStorage(video, incidentId, user.uid);
 
       const incidentData = {
         id: incidentId,
@@ -962,21 +857,24 @@ export default function CaptureIncidentScreen() {
         updatedAt: serverTimestamp(),
       };
 
-      await setDoc(doc(db, "incidents", incidentId), incidentData);
-
-      // Send email notification to the selected agency, reusing whichever
-      // backend host the video upload just proved reachable rather than
-      // re-guessing. Best-effort - shouldn't block a successful report.
       try {
-        const backendOrigin = new URL(videoUrl).origin;
-        await fetch(`${backendOrigin}/api/notify-agency`, {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            agency,
-            incidentData,
-          }),
-        });
+        await setDoc(doc(db, "incidents", incidentId), incidentData);
+      } catch (saveError) {
+        // A retry uploads the video again under a new ID, so don't leave this
+        // copy taking up the free storage.
+        await deleteIncidentVideo(incidentId).catch(() => {});
+        throw saveError;
+      }
+
+      // Email the selected agency: through EmailJS when it's set up, else the
+      // dev machine's backend. Best-effort - shouldn't block a successful
+      // report; admins also see it in their dashboard.
+      try {
+        if (isEmailJsConfigured) {
+          await sendAgencyEmail(agency, incidentData);
+        } else if (HAS_BACKEND) {
+          await postToBackend("/notify-agency", { agency, incidentData });
+        }
       } catch (notifyError) {
         console.warn("Notification server unavailable:", notifyError);
         // Don't block success - email notification is best-effort

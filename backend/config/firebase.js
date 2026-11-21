@@ -26,25 +26,17 @@ if (process.env.FIREBASE_SERVICE_ACCOUNT_BASE64) {
 }
 
 if (serviceAccount) {
-  admin.initializeApp({
-    credential: admin.credential.cert(serviceAccount),
-  });
+  admin.initializeApp({ credential: admin.credential.cert(serviceAccount) });
 } else {
   admin.initializeApp();
 }
 
 const firestore = admin.firestore();
 let auth = null;
-let storage = null;
 try {
   auth = admin.auth();
-} catch (e) {
+} catch {
   auth = null;
 }
-try {
-  storage = admin.storage ? admin.storage() : null;
-} catch (e) {
-  storage = null;
-}
 
-module.exports = { admin, firestore, auth, storage };
+module.exports = { admin, firestore, auth };

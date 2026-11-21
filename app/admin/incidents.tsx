@@ -26,6 +26,7 @@ import {
 } from "../../services/firestoreService";
 import { showAlert } from "../../utils/crossPlatformAlert";
 import { getIncidentVideoUrlCandidates } from "../../utils/incidentVideo";
+import { isStoredVideoUrl } from "../../utils/videoStore";
 
 const INBOX_AGENCIES = AGENCIES;
 type InboxAgency = Agency;
@@ -86,6 +87,24 @@ function VideoThumbnail({
   overlayStyle: object;
   onPress: () => void;
 }) {
+  // Videos stored in Firestore are only downloaded when opened: fetching every
+  // one just to draw list thumbnails would eat the free plan's daily reads.
+  if (isStoredVideoUrl(uri)) {
+    return (
+      <TouchableOpacity
+        style={[style, thumbnailLoadingStyle]}
+        onPress={onPress}
+        activeOpacity={0.8}
+        accessibilityRole="button"
+        accessibilityLabel="Open incident video"
+      >
+        <View style={overlayStyle}>
+          <Ionicons name="play-circle" size={36} color="#fff" />
+        </View>
+      </TouchableOpacity>
+    );
+  }
+
   if (!isRemoteVideoUrl(uri)) {
     return (
       <View style={[style, thumbnailLoadingStyle]}>

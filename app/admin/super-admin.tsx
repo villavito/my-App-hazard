@@ -34,7 +34,7 @@ import { showAlert } from "../../utils/crossPlatformAlert";
 import { buildStatusData, buildTrendData } from "../../utils/incidentCharts";
 
 const TREND_DAYS = 14;
-const USERS_PAGE_SIZE = 10;
+const USERS_PAGE_SIZE = 20;
 const RECENT_INCIDENTS = 5;
 
 type Role = "user" | "admin" | "super_admin";
@@ -76,6 +76,62 @@ const ROLE_FILTERS: { key: Role | "all"; label: string }[] = [
 const roleMeta = (role?: Role) =>
   ROLE_OPTIONS.find((r) => r.key === role) ?? ROLE_OPTIONS[0];
 
+type UserGroup = {
+  key: string;
+  title: string;
+  subtitle?: string;
+  color: string;
+  users: AppUser[];
+};
+
+const byName = (a: AppUser, b: AppUser) =>
+  (a.displayName || a.email || "").localeCompare(
+    b.displayName || b.email || "",
+    undefined,
+    { sensitivity: "base" },
+  );
+
+// Super admins first, then each agency's admins, then admins still missing an
+// agency, then citizens - each sorted by name. Empty groups are left out, and
+// anyone who fits no earlier group lands with the citizens, so nobody is hidden.
+function groupUsers(list: AppUser[]): UserGroup[] {
+  const placed = new Set<string>();
+  const take = (match: (u: AppUser) => boolean) => {
+    const users = list.filter((u) => !placed.has(u.id) && match(u));
+    users.forEach((u) => placed.add(u.id));
+    return users.sort(byName);
+  };
+  const groups: UserGroup[] = [
+    {
+      key: "super_admin",
+      title: "Super Admins",
+      color: roleMeta("super_admin").color,
+      users: take((u) => u.role === "super_admin"),
+    },
+    ...AGENCIES.map((agency) => ({
+      key: `admin-${agency}`,
+      title: `${agency} Admins`,
+      subtitle: AGENCY_LABELS[agency],
+      color: AGENCY_COLORS[agency],
+      users: take((u) => u.role === "admin" && u.agency === agency),
+    })),
+    {
+      key: "admin-none",
+      title: "Admins without an agency",
+      subtitle: "They can't see any reports until you assign one",
+      color: "#FF9500",
+      users: take((u) => u.role === "admin"),
+    },
+    {
+      key: "citizens",
+      title: "Citizens",
+      color: roleMeta("user").color,
+      users: take(() => true),
+    },
+  ];
+  return groups.filter((group) => group.users.length > 0);
+}
+
 const statusMeta = (status?: string) =>
   INCIDENT_STATUSES.find((s) => s.key === (status ?? "pending")) ??
   INCIDENT_STATUSES[0];
@@ -105,7 +161,15 @@ export default function SuperAdminDashboard() {
 
   const [search, setSearch] = useState("");
   const [roleFilter, setRoleFilter] = useState<Role | "all">("all");
+  // Only admins belong to an agency, so this narrows the admin groups.
+  const [agencyFilter, setAgencyFilter] = useState<Agency | "all">("all");
   const [visibleUsers, setVisibleUsers] = useState(USERS_PAGE_SIZE);
+
+  const chooseRoleFilter = (role: Role | "all") => {
+    setRoleFilter(role);
+    if (role !== "all" && role !== "admin") setAgencyFilter("all");
+    setVisibleUsers(USERS_PAGE_SIZE);
+  };
 
   const [editingUid, setEditingUid] = useState<string | null>(null);
   const [draftRole, setDraftRole] = useState<Role>("user");
@@ -232,13 +296,33 @@ export default function SuperAdminDashboard() {
       if (roleFilter !== "all" && (u.role ?? "user") !== roleFilter) {
         return false;
       }
+      if (
+        agencyFilter !== "all" &&
+        !(u.role === "admin" && u.agency === agencyFilter)
+      ) {
+        return false;
+      }
       if (!term) return true;
       return (
         (u.displayName ?? "").toLowerCase().includes(term) ||
         (u.email ?? "").toLowerCase().includes(term)
       );
     });
-  }, [users, search, roleFilter]);
+  }, [users, search, roleFilter, agencyFilter]);
+
+  // The groups as shown: "Show more" pages through them in order, so the
+  // admin groups (always small) come first and citizens fill the rest.
+  const visibleGroups = useMemo(() => {
+    const shownGroups: (UserGroup & { shown: AppUser[] })[] = [];
+    let left = visibleUsers;
+    for (const group of groupUsers(filteredUsers)) {
+      if (left <= 0) break;
+      const shown = group.users.slice(0, left);
+      left -= shown.length;
+      shownGroups.push({ ...group, shown });
+    }
+    return shownGroups;
+  }, [filteredUsers, visibleUsers]);
 
   // ---- User role editing --------------------------------------------------
 
@@ -598,6 +682,43 @@ export default function SuperAdminDashboard() {
     chipTextActive: {
       color: "#007AFF",
     },
+    groupHeader: {
+      flexDirection: "row",
+      alignItems: "center",
+      gap: 8,
+      marginTop: 18,
+      paddingBottom: 6,
+      borderBottomWidth: 2,
+      borderBottomColor: border,
+    },
+    groupDot: {
+      width: 10,
+      height: 10,
+      borderRadius: 5,
+    },
+    groupTitle: {
+      flexShrink: 1,
+      fontSize: 14,
+      fontWeight: "700",
+      color: text,
+    },
+    groupCount: {
+      minWidth: 22,
+      paddingHorizontal: 7,
+      paddingVertical: 2,
+      borderRadius: 11,
+      alignItems: "center",
+    },
+    groupCountText: {
+      color: "#fff",
+      fontSize: 12,
+      fontWeight: "700",
+    },
+    groupSubtitle: {
+      fontSize: 12,
+      color: muted,
+      marginTop: 4,
+    },
     userRow: {
       paddingVertical: 12,
       borderBottomWidth: 1,
@@ -831,7 +952,7 @@ export default function SuperAdminDashboard() {
           <View style={[styles.rolePill, { backgroundColor: meta.color }]}>
             <Text style={styles.rolePillText}>
               {item.role === "admin" && item.agency
-                ? `${item.agency} ADMIN`
+                ? `${item.agency.toUpperCase()} ADMIN`
                 : meta.label.toUpperCase()}
             </Text>
           </View>
@@ -997,8 +1118,7 @@ export default function SuperAdminDashboard() {
                       if ("route" in tile && tile.route) {
                         router.push(tile.route as any);
                       } else if ("filter" in tile && tile.filter) {
-                        setRoleFilter(tile.filter);
-                        setVisibleUsers(USERS_PAGE_SIZE);
+                        chooseRoleFilter(tile.filter);
                       }
                     }}
                   >
@@ -1241,10 +1361,7 @@ export default function SuperAdminDashboard() {
                       <TouchableOpacity
                         key={filter.key}
                         style={[styles.chip, active && styles.chipActive]}
-                        onPress={() => {
-                          setRoleFilter(filter.key);
-                          setVisibleUsers(USERS_PAGE_SIZE);
-                        }}
+                        onPress={() => chooseRoleFilter(filter.key)}
                       >
                         <Text
                           style={[
@@ -1259,10 +1376,62 @@ export default function SuperAdminDashboard() {
                   })}
                 </View>
 
-                {filteredUsers.length === 0 ? (
+                {(roleFilter === "all" || roleFilter === "admin") && (
+                  <View style={styles.chipRow}>
+                    {(["all", ...AGENCIES] as const).map((agency) => {
+                      const active = agencyFilter === agency;
+                      return (
+                        <TouchableOpacity
+                          key={agency}
+                          style={[styles.chip, active && styles.chipActive]}
+                          onPress={() => {
+                            setAgencyFilter(agency);
+                            setVisibleUsers(USERS_PAGE_SIZE);
+                          }}
+                          accessibilityLabel={
+                            agency === "all"
+                              ? "Show every agency"
+                              : `Show ${AGENCY_LABELS[agency]} admins`
+                          }
+                        >
+                          <Text
+                            style={[
+                              styles.chipText,
+                              active && styles.chipTextActive,
+                            ]}
+                          >
+                            {agency === "all" ? "All agencies" : agency}
+                          </Text>
+                        </TouchableOpacity>
+                      );
+                    })}
+                  </View>
+                )}
+
+                {visibleGroups.length === 0 ? (
                   <Text style={styles.emptyText}>No users match</Text>
                 ) : (
-                  filteredUsers.slice(0, visibleUsers).map(renderUser)
+                  visibleGroups.map((group) => (
+                    <View key={group.key}>
+                      <View style={styles.groupHeader}>
+                        <View
+                          style={[styles.groupDot, { backgroundColor: group.color }]}
+                        />
+                        <Text style={styles.groupTitle}>{group.title}</Text>
+                        <View
+                          style={[styles.groupCount, { backgroundColor: group.color }]}
+                        >
+                          <Text style={styles.groupCountText}>
+                            {group.users.length}
+                          </Text>
+                        </View>
+                      </View>
+                      {group.subtitle ? (
+                        <Text style={styles.groupSubtitle}>{group.subtitle}</Text>
+                      ) : null}
+                      {group.shown.map(renderUser)}
+                    </View>
+                  ))
                 )}
 
                 {filteredUsers.length > visibleUsers && (

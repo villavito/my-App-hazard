@@ -2,7 +2,8 @@ import { useRouter } from 'expo-router';
 import { useState } from 'react';
 import { StyleSheet, Text, TextInput, TouchableOpacity, useColorScheme, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { postToBackend } from '../config/api';
+import { HAS_BACKEND, postToBackend } from '../config/api';
+import { sendResetEmail } from '../services/authService';
 import { showAlert } from '../utils/crossPlatformAlert';
 import {
   formatMobile,
@@ -189,6 +190,22 @@ export default function ForgotPasswordScreen() {
 
     setLoading(true);
     try {
+      // Email resets go through Firebase's own reset email (a link to a page
+      // where the user picks a new password), so they work with no backend.
+      if (method === 'email') {
+        const result = await sendResetEmail(normalizedEmail);
+        if (!result.success) {
+          showAlert('Error', result.error);
+          return;
+        }
+        showAlert(
+          'Check Your Email',
+          'If an account exists for this email, we sent a link to reset your password. Open it, choose a new password, then sign in. Check your spam folder too.',
+          [{ text: 'OK', onPress: () => router.push('/login') }],
+        );
+        return;
+      }
+
       const { ok, data } = await postToBackend(
         '/auth/forgot-password/send-code',
         recoveryTarget,
@@ -201,19 +218,12 @@ export default function ForgotPasswordScreen() {
 
       // The server doesn't say whether the account exists (so this screen
       // can't be used to find out who has one), hence "if".
-      if (method === 'email') {
-        showAlert(
-          'Check Your Email',
-          'If an account exists for this email, a 6-digit reset code has been sent. It expires in 10 minutes - check your spam folder too.',
-        );
-      } else {
-        showAlert(
-          'Check Your Messages',
-          'If an account uses this mobile number, a 6-digit reset code has been sent by SMS. It expires in 10 minutes.',
-        );
-      }
+      showAlert(
+        'Check Your Messages',
+        'If an account uses this mobile number, a 6-digit reset code has been sent by SMS. It expires in 10 minutes.',
+      );
       setStep('reset');
-    } catch (error: any) {
+    } catch {
       showAlert('Error', 'Network error. Please check your connection and try again.');
     } finally {
       setLoading(false);
@@ -275,7 +285,7 @@ export default function ForgotPasswordScreen() {
         'Your password has been reset successfully. Please sign in with your new password.',
         [{ text: 'OK', onPress: () => router.push('/login') }]
       );
-    } catch (error: any) {
+    } catch {
       showAlert('Error', 'Network error. Please check your connection and try again.');
     } finally {
       setLoading(false);
@@ -297,6 +307,9 @@ export default function ForgotPasswordScreen() {
       <View style={styles.form}>
         {step === 'request' ? (
           <>
+            {/* SMS codes need the backend server, which the live web app
+                doesn't have - there, only the email option is offered. */}
+            {HAS_BACKEND && (
             <View style={styles.methodSwitch}>
               {(
                 [
@@ -321,11 +334,12 @@ export default function ForgotPasswordScreen() {
                 </TouchableOpacity>
               ))}
             </View>
+            )}
 
             <View style={styles.infoBox}>
               <Text style={styles.infoText}>
                 {method === 'email'
-                  ? 'Enter your email address and we’ll send you a 6-digit code to reset your password.'
+                  ? 'Enter your email address and we’ll send you a link to reset your password.'
                   : 'Enter the mobile number saved on your account and we’ll text you a 6-digit code to reset your password.'}
               </Text>
             </View>
@@ -380,7 +394,11 @@ export default function ForgotPasswordScreen() {
               disabled={loading}
             >
               <Text style={styles.buttonText}>
-                {loading ? 'Sending...' : 'Send Reset Code'}
+                {loading
+                  ? 'Sending...'
+                  : method === 'email'
+                    ? 'Send Reset Link'
+                    : 'Send Reset Code'}
               </Text>
             </TouchableOpacity>
           </>

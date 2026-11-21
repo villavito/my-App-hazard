@@ -16,7 +16,6 @@ import {
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { useAuth } from "../../contexts/AuthContext";
-import { getUserIncidents } from "../../services/firestoreService";
 import { showAlert } from "../../utils/crossPlatformAlert";
 
 // WMO weather codes (https://open-meteo.com/en/docs) collapsed into a small
@@ -60,13 +59,6 @@ export default function HomeScreen() {
   const isDark = colorScheme === "dark";
   const router = useRouter();
   const { user, userRole } = useAuth();
-  const [stats, setStats] = useState({
-    total: 0,
-    pending: 0,
-    inProgress: 0,
-    resolved: 0,
-  });
-  const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [weather, setWeather] = useState<{
     temperature: number;
@@ -167,34 +159,13 @@ export default function HomeScreen() {
     }
   };
 
-  const fetchData = async () => {
-    if (!user) return;
-    const result = await getUserIncidents(user.uid);
-    if (result.success && result.data) {
-      const incidents = result.data as any[];
-      setStats({
-        total: incidents.length,
-        pending: incidents.filter((i: any) => i.status === "pending").length,
-        inProgress: incidents.filter(
-          (i: any) => i.status === "in_progress" || i.status === "in-progress",
-        ).length,
-        resolved: incidents.filter((i: any) => i.status === "resolved").length,
-      });
-    }
-    setLoading(false);
-  };
-
-  useEffect(() => {
-    fetchData();
-  }, [user]);
-
   useEffect(() => {
     fetchWeather();
   }, []);
 
   const onRefresh = async () => {
     setRefreshing(true);
-    await Promise.all([fetchData(), fetchWeather()]);
+    await fetchWeather();
     setRefreshing(false);
   };
 
@@ -248,31 +219,6 @@ export default function HomeScreen() {
       color: "#fff",
       fontSize: 18,
       fontWeight: "700",
-    },
-    statsRow: {
-      flexDirection: "row",
-      paddingHorizontal: 20,
-      marginTop: 20,
-      gap: 10,
-    },
-    statCard: {
-      flex: 1,
-      backgroundColor: isDark ? "#1a1a1a" : "#fff",
-      padding: 14,
-      borderRadius: 14,
-      alignItems: "center",
-      boxShadow: "0px 1px 3px rgba(0, 0, 0, 0.1)",
-    },
-    statNumber: {
-      fontSize: 22,
-      fontWeight: "800",
-      color: "#007AFF",
-    },
-    statLabel: {
-      fontSize: 11,
-      color: isDark ? "#888" : "#666",
-      marginTop: 4,
-      textAlign: "center",
     },
     widgetRow: {
       flexDirection: "row",
@@ -361,22 +307,7 @@ export default function HomeScreen() {
       color: isDark ? "#fff" : "#000",
       textAlign: "center",
     },
-    loadingContainer: {
-      flex: 1,
-      justifyContent: "center",
-      alignItems: "center",
-    },
   });
-
-  if (loading) {
-    return (
-      <SafeAreaView style={styles.container}>
-        <View style={styles.loadingContainer}>
-          <ActivityIndicator size="large" color="#007AFF" />
-        </View>
-      </SafeAreaView>
-    );
-  }
 
   return (
     <SafeAreaView style={styles.container}>
