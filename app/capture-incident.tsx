@@ -454,6 +454,9 @@ export default function CaptureIncidentScreen() {
       alignItems: "center",
       marginBottom: 8,
     },
+    videoWrapper: {
+      width: "100%",
+    },
     capturedImage: {
       width: "100%",
       height: 200,
@@ -1024,7 +1027,10 @@ export default function CaptureIncidentScreen() {
               </Text>
             </View>
           ) : video ? (
-            <View>
+            // Full width: imageContainer centres its children, so without an
+            // explicit width this wrapper shrinks to its content and the
+            // VideoView's width: "100%" resolves to 0 - an empty dark box.
+            <View style={styles.videoWrapper}>
               {/* textureView: the default SurfaceView renders black or stops
                   redrawing inside a ScrollView / rounded container on Android. */}
               <VideoView

@@ -1,9 +1,7 @@
 import { Ionicons } from "@expo/vector-icons";
-import * as Google from "expo-auth-session/providers/google";
 import Constants, { AppOwnership } from "expo-constants";
 import { useRouter } from "expo-router";
-import * as WebBrowser from "expo-web-browser";
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useState } from "react";
 import {
   ActivityIndicator,
   Platform,
@@ -11,6 +9,8 @@ import {
   Text,
   TextInput,
   TouchableOpacity,
+  type TurboModule,
+  TurboModuleRegistry,
   useColorScheme,
   View,
 } from "react-native";
@@ -19,12 +19,12 @@ import { useAuth } from "../contexts/AuthContext";
 import {
   friendlyAuthError,
   signInUser,
-  signInWithGoogleToken,
   signInWithGooglePopup,
+  signInWithGoogleToken,
 } from "../services/authService";
 import { showAlert } from "../utils/crossPlatformAlert";
 
-WebBrowser.maybeCompleteAuthSession();
+let googleSigninConfigured = false;
 
 export default function LoginScreen() {
   const colorScheme = useColorScheme();
@@ -37,29 +37,15 @@ export default function LoginScreen() {
   const router = useRouter();
   const { refreshUserRole } = useAuth();
   const isExpoGo = Constants.appOwnership === AppOwnership.Expo;
-  const [googleRequest, googleResponse, promptGoogleSignIn] =
-    Google.useIdTokenAuthRequest({
-      iosClientId:
-        process.env.EXPO_PUBLIC_GOOGLE_IOS_CLIENT_ID ??
-        "ios-client-id-not-configured",
-      androidClientId:
-        process.env.EXPO_PUBLIC_GOOGLE_ANDROID_CLIENT_ID ??
-        "android-client-id-not-configured",
-      webClientId:
-        process.env.EXPO_PUBLIC_GOOGLE_WEB_CLIENT_ID ??
-        "web-client-id-not-configured",
-      selectAccount: true,
-    }, {
-      native: "incident-reporting-app:/oauthredirect",
-      scheme: "incident-reporting-app",
-    });
   const hasGoogleClientId =
     Platform.OS === "ios"
       ? Boolean(process.env.EXPO_PUBLIC_GOOGLE_IOS_CLIENT_ID)
       : Platform.OS === "android"
         ? Boolean(process.env.EXPO_PUBLIC_GOOGLE_ANDROID_CLIENT_ID)
         : Boolean(process.env.EXPO_PUBLIC_GOOGLE_WEB_CLIENT_ID);
-  const handledGoogleResponse = useRef<object | null>(null);
+  const hasGoogleWebClientId = Boolean(
+    process.env.EXPO_PUBLIC_GOOGLE_WEB_CLIENT_ID,
+  );
 
   const styles = StyleSheet.create({
     container: {
@@ -213,67 +199,75 @@ export default function LoginScreen() {
     [router],
   );
 
-  const startGoogleSignIn = useCallback(async () => {
+  const startNativeGoogleSignIn = useCallback(async () => {
+    if (!TurboModuleRegistry.get<TurboModule>("RNGoogleSignin")) {
+      showAlert(
+        "Development Build Required",
+        "This app build does not include Google Sign-In. Rebuild and reinstall the development or production app.",
+      );
+      return;
+    }
+
     setLoading(true);
     setGoogleLoading(true);
     try {
-      const result = await promptGoogleSignIn();
-      if (result.type !== "success") {
-        setLoading(false);
-        setGoogleLoading(false);
-        if (result.type === "error") {
-          showAlert(
-            "Google Sign-In Error",
-            result.error?.description || "Google sign-in was not completed.",
-          );
-        }
+      const googleSignIn =
+        await import("@react-native-google-signin/google-signin");
+      if (!googleSigninConfigured) {
+        googleSignIn.GoogleSignin.configure({
+          webClientId: process.env.EXPO_PUBLIC_GOOGLE_WEB_CLIENT_ID,
+          ...(Platform.OS === "ios" &&
+          process.env.EXPO_PUBLIC_GOOGLE_IOS_CLIENT_ID
+            ? {
+                iosClientId: process.env.EXPO_PUBLIC_GOOGLE_IOS_CLIENT_ID,
+              }
+            : {}),
+        });
+        googleSigninConfigured = true;
       }
-    } catch (error: any) {
-      setLoading(false);
-      setGoogleLoading(false);
+
+      await googleSignIn.GoogleSignin.hasPlayServices({
+        showPlayServicesUpdateDialog: true,
+      });
+      const response = await googleSignIn.GoogleSignin.signIn();
+      if (!googleSignIn.isSuccessResponse(response)) return;
+
+      const idToken = response.data.idToken;
+      if (!idToken) {
+        throw new Error(
+          "Google did not return an ID token. Check the Web OAuth client ID configuration.",
+        );
+      }
+
+      const result = await signInWithGoogleToken(idToken);
+      if (result.success) {
+        await refreshUserRole();
+        navigateByRole(result.user.role);
+      } else {
+        showAlert("Google Sign-In Error", result.error);
+      }
+    } catch (error: unknown) {
+      const code =
+        typeof error === "object" &&
+        error !== null &&
+        "code" in error &&
+        typeof error.code === "string"
+          ? error.code
+          : undefined;
       showAlert(
         "Google Sign-In Error",
-        friendlyAuthError(error?.code, error?.message),
+        friendlyAuthError(
+          code,
+          error instanceof Error
+            ? error.message
+            : "Google sign-in failed. Please try again.",
+        ),
       );
+    } finally {
+      setLoading(false);
+      setGoogleLoading(false);
     }
-  }, [promptGoogleSignIn]);
-
-  useEffect(() => {
-    if (!googleResponse || handledGoogleResponse.current === googleResponse) {
-      return;
-    }
-    handledGoogleResponse.current = googleResponse;
-
-    void (async () => {
-      if (googleResponse.type !== "success") return;
-
-      const idToken = googleResponse.params.id_token;
-      if (!idToken) {
-        setLoading(false);
-        setGoogleLoading(false);
-        showAlert("Google Sign-In Error", "Google did not return an ID token.");
-        return;
-      }
-
-      try {
-        const result = await signInWithGoogleToken(idToken);
-        if (result.success) {
-          await refreshUserRole();
-          navigateByRole(result.user.role);
-        } else {
-          showAlert("Google Sign-In Error", result.error);
-        }
-      } catch (error: any) {
-        showAlert(
-          "Google Sign-In Error",
-          friendlyAuthError(error?.code, error?.message),
-        );
-      } finally {
-        setLoading(false);
-        setGoogleLoading(false);
-      }
-    })();
-  }, [googleResponse, navigateByRole, refreshUserRole]);
+  }, [navigateByRole, refreshUserRole]);
 
   const handleGoogleLogin = () => {
     if (Platform.OS === "web") {
@@ -307,7 +301,7 @@ export default function LoginScreen() {
     if (isExpoGo) {
       showAlert(
         "Development Build Required",
-        "Google sign-in on mobile requires this app's development or production build. Expo Go cannot use this app's Android/iOS OAuth client securely.",
+        "Google sign-in on mobile requires this app's development or production build. Expo Go does not include the native Google Sign-In module.",
       );
       return;
     }
@@ -320,15 +314,15 @@ export default function LoginScreen() {
       return;
     }
 
-    if (!googleRequest) {
+    if (!hasGoogleWebClientId) {
       showAlert(
         "Google Sign-In Unavailable",
-        "Google sign-in is still loading. Please try again.",
+        "Configure the Google Web OAuth client ID to enable Firebase sign-in.",
       );
       return;
     }
 
-    void startGoogleSignIn();
+    void startNativeGoogleSignIn();
   };
 
   const handleLogin = async () => {
@@ -443,17 +437,11 @@ export default function LoginScreen() {
         <TouchableOpacity
           style={[
             styles.googleButton,
-            (loading ||
-              (Platform.OS !== "web" &&
-                (!googleRequest || !hasGoogleClientId))) &&
+            (loading || !hasGoogleClientId || !hasGoogleWebClientId) &&
               styles.buttonDisabled,
           ]}
           onPress={handleGoogleLogin}
-          disabled={
-            loading ||
-            (Platform.OS !== "web" &&
-              (!googleRequest || !hasGoogleClientId))
-          }
+          disabled={loading || !hasGoogleClientId || !hasGoogleWebClientId}
         >
           {googleLoading ? (
             <ActivityIndicator color={isDark ? "#fff" : "#222"} />

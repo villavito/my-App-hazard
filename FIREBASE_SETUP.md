@@ -18,11 +18,11 @@ For Google sign-in, create OAuth client IDs in the Google Cloud project linked
 to Firebase:
 
 - Android: use package name `com.villavito.incidentreportingapp` and add the
-  app's signing certificate SHA-1 fingerprints.
+  app's development and production signing certificate SHA-1 fingerprints.
 - iOS: use bundle ID `com.villavito.incidentreportingapp`.
-- Web: add the app's web origin to Firebase Authentication's authorized
-  domains, and add the browser origin and AuthSession redirect URL to the web
-  OAuth client's authorized origins and redirect URIs.
+- Web: use a Web OAuth client ID for the Firebase ID-token exchange. Add the
+  app's web domain to Firebase Authentication's authorized domains for web
+  sign-in.
 
 Put the resulting client IDs in the project-root `.env.local` file:
 
@@ -33,12 +33,21 @@ EXPO_PUBLIC_GOOGLE_WEB_CLIENT_ID=your-web-client-id
 ```
 
 These are public OAuth client IDs, not client secrets. Restart Expo after
-changing them. Native Google sign-in requires a development or production
-build configured with the matching package/bundle ID and signing credentials.
-Expo Go cannot complete this OAuth redirect; use `npx expo run:android` or
-`npx expo run:ios` to build and install a development app instead. For Android,
-register the development build's SHA-1 signing fingerprint with its Android
-OAuth client in Firebase/Google Cloud before testing.
+changing them. Native sign-in uses Google's native SDK and Firebase
+Authentication; it does not use a browser OAuth redirect. The iOS URL scheme
+in the `@react-native-google-signin/google-signin` plugin in `app.json` must
+match the reversed iOS client ID. Update it if that client ID changes.
+
+Native Google sign-in requires a development or production build; Expo Go
+cannot load the required native module. Install `expo-dev-client`, then rebuild
+and install the app with `npx expo run:android` or `npx expo run:ios`. The
+`npm start`, `npm run android`, and `npm run ios` commands start Metro for a
+custom development client. Open its QR code in the newly installed native app;
+reloading JavaScript or installing the package alone does not update an older
+native build.
+For Android, register the SHA-1 fingerprint of the development build's signing
+certificate with the Android OAuth client in Firebase/Google Cloud before
+testing.
 
 ## 3. Setup Firestore Database
 
