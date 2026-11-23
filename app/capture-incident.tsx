@@ -640,7 +640,16 @@ export default function CaptureIncidentScreen() {
         return;
       }
 
-      const servicesEnabled = await Location.hasServicesEnabledAsync();
+      let servicesEnabled = await Location.hasServicesEnabledAsync();
+      if (!servicesEnabled && Platform.OS === "android") {
+        // Show the one-tap system "Turn on location?" dialog first.
+        try {
+          await Location.enableNetworkProviderAsync();
+        } catch {
+          // Declined - fall through to the alert below.
+        }
+        servicesEnabled = await Location.hasServicesEnabledAsync();
+      }
       if (!servicesEnabled) {
         showAlert(
           "Location Services Off",

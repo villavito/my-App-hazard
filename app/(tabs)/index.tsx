@@ -97,8 +97,19 @@ export default function HomeScreen() {
       }
 
       if (!(await Location.hasServicesEnabledAsync())) {
-        setWeatherError("Turn on location services for weather");
-        return;
+        // On Android, pop the system "Turn on location?" dialog right away so
+        // the user can switch GPS on with one tap instead of visiting Settings.
+        if (Platform.OS === "android") {
+          try {
+            await Location.enableNetworkProviderAsync();
+          } catch {
+            // User tapped "No thanks" - fall through to the message below.
+          }
+        }
+        if (!(await Location.hasServicesEnabledAsync())) {
+          setWeatherError("Turn on location services for weather");
+          return;
+        }
       }
 
       // Weather only needs a rough position, so a recent cached fix (instant,
