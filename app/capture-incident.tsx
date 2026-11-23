@@ -489,6 +489,10 @@ export default function CaptureIncidentScreen() {
     uploadButtonDisabled: {
       backgroundColor: isDark ? "#3a3a3a" : "#e9ecef",
     },
+    // White text vanished on the light grey disabled background.
+    uploadButtonTextDisabled: {
+      color: isDark ? "#999" : "#6c757d",
+    },
     uploadButtonText: {
       color: "#fff",
       fontSize: 14,
@@ -744,8 +748,12 @@ export default function CaptureIncidentScreen() {
     }
   };
 
+  // Location is filled in only by "Search My Location", and its text is set
+  // last (after the coordinates), so this also waits for that to finish.
+  const hasLocation = Boolean(coordinates && location.trim());
   const canSubmit = Boolean(
     video &&
+    hasLocation &&
     injuryLevel &&
     selectedAgency &&
     category &&
@@ -808,6 +816,7 @@ export default function CaptureIncidentScreen() {
     if (!canSubmit) {
       const missingFields = [
         !video ? "video" : null,
+        !hasLocation ? "location (tap Search My Location)" : null,
         !injuryLevel ? "injury level" : null,
         !selectedAgency ? "agency" : null,
         !category ? "incident" : null,
@@ -1107,6 +1116,8 @@ export default function CaptureIncidentScreen() {
                   style={[
                     styles.uploadButtonText,
                     styles.agencySubmitButtonText,
+                    (!canSubmit || isUploading) &&
+                      styles.uploadButtonTextDisabled,
                   ]}
                 >
                   {isUploading
