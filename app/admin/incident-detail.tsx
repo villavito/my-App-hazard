@@ -15,6 +15,7 @@ import {
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { IncidentVideoPlayer } from "../../components/IncidentVideoPlayer";
+import { useAuth } from "../../contexts/AuthContext";
 import {
   addIncidentComment,
   getIncidentById,
@@ -60,6 +61,7 @@ export default function IncidentDetailScreen() {
   const isDark = colorScheme === "dark";
   const router = useRouter();
   const { id } = useLocalSearchParams<{ id: string }>();
+  const { loading: authLoading } = useAuth();
 
   const [incident, setIncident] = useState<Incident | null>(null);
   const [loading, setLoading] = useState(true);
@@ -71,10 +73,12 @@ export default function IncidentDetailScreen() {
       ? incident.videoUrl
       : null;
   useEffect(() => {
-    if (id) {
+    // After a browser refresh the sign-in is still being restored, and
+    // Firestore's rules refuse the read until it is - so wait for it.
+    if (id && !authLoading) {
       loadIncident();
     }
-  }, [id]);
+  }, [id, authLoading]);
 
   const loadIncident = async () => {
     setLoading(true);

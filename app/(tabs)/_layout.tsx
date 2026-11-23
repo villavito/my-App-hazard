@@ -51,7 +51,7 @@ export default function TabLayout() {
       }}
     >
       <Tabs.Screen
-        name="index"
+        name="home"
         options={{
           title: "Home",
           tabBarIcon: ({ color, size }) => (
@@ -105,8 +105,10 @@ export default function TabLayout() {
           ),
         }}
       />
+      {/* Not "profile": app/profile.tsx already owns /profile, so refreshing
+          the browser on this tab opened that page instead, without the tabs. */}
       <Tabs.Screen
-        name="profile"
+        name="account"
         options={{
           title: "Profile",
           tabBarIcon: ({ color, size }) => (

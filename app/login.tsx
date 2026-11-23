@@ -23,6 +23,7 @@ import {
   signInWithGoogleToken,
 } from "../services/authService";
 import { showAlert } from "../utils/crossPlatformAlert";
+import { dashboardRouteFor } from "../utils/dashboardRoute";
 import { isInAppBrowser, openInRealBrowser } from "../utils/inAppBrowser";
 
 let googleSigninConfigured = false;
@@ -210,13 +211,7 @@ export default function LoginScreen() {
 
   const navigateByRole = useCallback(
     (role: "user" | "admin" | "super_admin") => {
-      if (role === "super_admin") {
-        router.push("/admin/super-admin");
-      } else if (role === "admin") {
-        router.push("/admin/dashboard");
-      } else {
-        router.push("/(tabs)");
-      }
+      router.push(dashboardRouteFor(role));
     },
     [router],
   );

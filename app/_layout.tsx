@@ -4,6 +4,14 @@ import { StyleSheet, View } from "react-native";
 import { SafeAreaProvider } from "react-native-safe-area-context";
 import { AuthProvider } from "../contexts/AuthContext";
 
+// A screen opened straight from its address (a browser refresh, a link) has
+// nothing under it, so its back arrow did nothing. Keep the start screen
+// underneath instead: going back there sends signed-in users to their own
+// dashboard (see app/index.tsx).
+export const unstable_settings = {
+  anchor: "index",
+};
+
 export default function RootLayout() {
   return (
     <SafeAreaProvider>

@@ -11,6 +11,7 @@ import {
   View,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
+import { useAuth } from '../contexts/AuthContext';
 import {
   getNotificationById,
   markNotificationRead,
@@ -35,19 +36,22 @@ export default function NotificationDetailScreen() {
   const isDark = colorScheme === 'dark';
   const router = useRouter();
   const { id } = useLocalSearchParams<{ id: string }>();
+  const { loading: authLoading } = useAuth();
 
   const [notification, setNotification] = useState<AppNotification | null>(null);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    if (!id) return;
+    // After a browser refresh the sign-in is still being restored, and
+    // Firestore's rules refuse the read until it is - so wait for it.
+    if (!id || authLoading) return;
     getNotificationById(id).then((result) => {
       if (result.success && result.data) {
         setNotification(result.data as AppNotification);
       }
       setLoading(false);
     });
-  }, [id]);
+  }, [id, authLoading]);
 
   const handleMarkAsRead = () => {
     if (!notification) return;

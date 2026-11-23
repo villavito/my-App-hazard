@@ -17,6 +17,7 @@ import { SafeAreaView } from "react-native-safe-area-context";
 import { inferAgencyFromEmail } from "../constants/agencies";
 import { createUserWithRole } from "../services/authService";
 import { showAlert } from "../utils/crossPlatformAlert";
+import { dashboardRouteFor } from "../utils/dashboardRoute";
 import {
   formatMobile,
   isValidMobile,
@@ -324,13 +325,7 @@ export default function SignupScreen() {
         toE164Mobile(mobile),
       );
       if (result.success && result.user) {
-        const selectedRole = result.user.role;
-        const route =
-          selectedRole === "super_admin"
-            ? "/admin/super-admin"
-            : selectedRole === "admin"
-              ? "/admin/dashboard"
-              : "/(tabs)";
+        const route = dashboardRouteFor(result.user.role);
 
         showAlert("Success", "Account created successfully!", [
           { text: "OK", onPress: () => router.replace(route) },

@@ -1,4 +1,4 @@
-import { router } from "expo-router";
+import { Redirect, router } from "expo-router";
 import {
   Image,
   Platform,
@@ -7,6 +7,8 @@ import {
   TouchableOpacity,
   View,
 } from "react-native";
+import { useAuth } from "../contexts/AuthContext";
+import { dashboardRouteFor } from "../utils/dashboardRoute";
 
 interface GradientTextProps {
   children: React.ReactNode;
@@ -40,8 +42,17 @@ const GradientText = ({ children, style }: GradientTextProps) => {
 };
 
 export default function App() {
+  const { user, userRole, loading } = useAuth();
+
   function handleGetStarted() {
     router.push("/signup");
+  }
+
+  // Someone already signed in who lands here (opening the site or app again,
+  // or going back past the first screen after a refresh) belongs on their own
+  // dashboard. <Redirect> only fires while this screen is the one on show.
+  if (!loading && user && userRole) {
+    return <Redirect href={dashboardRouteFor(userRole.role)} />;
   }
 
   return (
