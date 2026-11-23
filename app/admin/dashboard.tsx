@@ -31,6 +31,12 @@ const QUICK_ACTIONS = [
     route: "/admin/incidents" as const,
   },
   {
+    key: "map",
+    label: "Incident Map",
+    icon: "map-outline" as const,
+    route: "/admin/map" as const,
+  },
+  {
     key: "reports",
     label: "Reports",
     icon: "document-text-outline" as const,

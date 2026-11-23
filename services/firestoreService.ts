@@ -4,6 +4,7 @@ import {
   deleteDoc,
   deleteField,
   doc,
+  type DocumentData,
   getCountFromServer,
   getDoc,
   getDocs,
@@ -261,6 +262,53 @@ export const subscribeToNewIncidents = (
       },
     );
   });
+  return () => unsubscribes.forEach((unsubscribe) => unsubscribe());
+};
+
+// A live copy of every report for the given agencies, with one listener per
+// agency - the same scoping the Firestore rules require. `onChange` gets the
+// whole list once every agency has answered, then again after each report is
+// added, changed or deleted, along with how many agencies couldn't be read.
+// It costs one read per report when it starts and one per change after that,
+// far less than reloading. Returns the unsubscribe function.
+export const subscribeToAgencyIncidents = (
+  agencies: readonly string[],
+  onChange: (incidents: DocumentData[], failedAgencies: number) => void,
+) => {
+  if (agencies.length === 0) {
+    // Nothing to watch (an admin with no agency yet): answer right away.
+    const timer = setTimeout(() => onChange([], 0), 0);
+    return () => clearTimeout(timer);
+  }
+
+  const byAgency = new Map<string, DocumentData[]>();
+  const failed = new Set<string>();
+  const emit = () => {
+    // Wait for every agency's first answer, so the map doesn't start out
+    // fitted to just one of them.
+    if (byAgency.size + failed.size < agencies.length) return;
+    onChange([...byAgency.values()].flat(), failed.size);
+  };
+
+  const unsubscribes = agencies.map((agency) =>
+    onSnapshot(
+      query(collection(db, "incidents"), where("involvedAgency", "==", agency)),
+      (snapshot) => {
+        failed.delete(agency);
+        byAgency.set(
+          agency,
+          snapshot.docs.map((docSnap) => ({ id: docSnap.id, ...docSnap.data() })),
+        );
+        emit();
+      },
+      (error) => {
+        console.error(`Error listening to ${agency} incident reports:`, error);
+        byAgency.delete(agency);
+        failed.add(agency);
+        emit();
+      },
+    ),
+  );
   return () => unsubscribes.forEach((unsubscribe) => unsubscribe());
 };
 

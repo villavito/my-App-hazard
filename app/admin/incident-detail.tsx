@@ -3,7 +3,6 @@ import { useLocalSearchParams, useRouter } from "expo-router";
 import React, { useEffect, useState } from "react";
 import {
   ActivityIndicator,
-  Linking,
   Platform,
   ScrollView,
   StyleSheet,
@@ -15,6 +14,7 @@ import {
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { IncidentVideoPlayer } from "../../components/IncidentVideoPlayer";
+import { LocationMap } from "../../components/LocationMap";
 import { useAuth } from "../../contexts/AuthContext";
 import {
   addIncidentComment,
@@ -22,6 +22,13 @@ import {
   updateIncidentStatus,
 } from "../../services/firestoreService";
 import { showAlert } from "../../utils/crossPlatformAlert";
+import {
+  formatCoordinates,
+  formatDistance,
+  isCoordinatesText,
+  lookupAddress,
+  reportCoordinates,
+} from "../../utils/location";
 import { isStoredVideoUrl } from "../../utils/videoStore";
 
 
@@ -53,6 +60,10 @@ type Incident = {
   latitude?: number;
   longitude?: number;
   coordinates?: { latitude: number; longitude: number } | null;
+  /** Meters the reporter's position may be off by (newer reports only). */
+  locationAccuracy?: number | null;
+  /** "adjusted" when the reporter moved the pin by hand. */
+  locationSource?: string | null;
   createdAt?: { toDate: () => Date; seconds: number };
 };
 
@@ -89,6 +100,32 @@ export default function IncidentDetailScreen() {
     setLoading(false);
   };
 
+  // Reports sent from the web before it could look up addresses saved only
+  // "lat, lng" as their location, so find the address to show instead.
+  const coords = incident ? reportCoordinates(incident) : null;
+  const latitude = coords?.latitude;
+  const longitude = coords?.longitude;
+  const needsAddress = Boolean(coords && isCoordinatesText(incident?.location));
+  const [foundAddress, setFoundAddress] = useState<{
+    key: string;
+    address: string | null;
+  } | null>(null);
+  const pointKey = `${latitude},${longitude}`;
+  useEffect(() => {
+    if (!needsAddress || latitude == null || longitude == null) return;
+    let cancelled = false;
+    lookupAddress({ latitude, longitude }).then((address) => {
+      if (!cancelled) {
+        setFoundAddress({ key: `${latitude},${longitude}`, address });
+      }
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [needsAddress, latitude, longitude]);
+  const addressForPoint =
+    foundAddress?.key === pointKey ? foundAddress.address : null;
+
   const handleStatusUpdate = (newStatus: string) => {
     if (!incident) return;
     showAlert(
@@ -109,30 +146,6 @@ export default function IncidentDetailScreen() {
         },
       ],
     );
-  };
-
-  const openLocationInMaps = async (
-    latitude: number,
-    longitude: number,
-    label: string,
-  ) => {
-    const encodedLabel = encodeURIComponent(label || "Incident Location");
-    const nativeUrl = Platform.select({
-      ios: `maps:0,0?q=${encodedLabel}@${latitude},${longitude}`,
-      android: `geo:${latitude},${longitude}?q=${latitude},${longitude}(${encodedLabel})`,
-    });
-    const webUrl = `https://www.google.com/maps/search/?api=1&query=${latitude},${longitude}`;
-
-    try {
-      if (nativeUrl && (await Linking.canOpenURL(nativeUrl))) {
-        await Linking.openURL(nativeUrl);
-        return;
-      }
-      await Linking.openURL(webUrl);
-    } catch (error) {
-      console.warn("Error opening maps app:", error);
-      showAlert("Error", "Could not open the maps app.");
-    }
   };
 
   const handleComment = async () => {
@@ -463,14 +476,13 @@ export default function IncidentDetailScreen() {
       color: "#fff",
     },
     // Map preview
-    mapPlaceholder: {
-      height: 120,
-      width: "100%",
-      borderRadius: 12,
-      backgroundColor: isDark ? "#2a2a4e" : "#f0f0f5",
-      alignItems: "center",
-      justifyContent: "center",
+    locationMap: {
       marginTop: 12,
+    },
+    mapCaption: {
+      fontSize: 12,
+      color: isDark ? "#888" : "#999",
+      marginTop: 6,
     },
   });
 
@@ -523,11 +535,8 @@ export default function IncidentDetailScreen() {
   }
 
   const injuryBadge = getInjuryBadge(incident.injuryLevel);
-  const coords =
-    incident.coordinates ??
-    (incident.latitude != null && incident.longitude != null
-      ? { latitude: incident.latitude, longitude: incident.longitude }
-      : null);
+  const locationText =
+    (needsAddress && addressForPoint) || incident.location || "Not provided";
 
   return (
     <SafeAreaView style={styles.container}>
@@ -709,46 +718,33 @@ export default function IncidentDetailScreen() {
               />
               <View style={{ flex: 1 }}>
                 <Text style={styles.infoLabel}>Location</Text>
-                <Text style={styles.infoValue}>
-                  {incident.location || "Not provided"}
-                </Text>
+                <Text style={styles.infoValue}>{locationText}</Text>
                 {coords && (
-                  <TouchableOpacity
-                    style={styles.mapPlaceholder}
-                    onPress={() =>
-                      openLocationInMaps(
-                        coords.latitude,
-                        coords.longitude,
-                        incident.location || "Incident Location",
-                      )
-                    }
-                  >
-                    <Ionicons
-                      name="map-outline"
-                      size={24}
-                      color={isDark ? "#888" : "#999"}
+                  <>
+                    <LocationMap
+                      coords={coords}
+                      accuracy={incident.locationAccuracy}
+                      label={locationText}
+                      height={200}
+                      isDark={isDark}
+                      style={styles.locationMap}
+                      actionLabel="View on map"
+                      onPress={() =>
+                        router.push({
+                          pathname: "/admin/map",
+                          params: { focus: incident.id },
+                        } as any)
+                      }
                     />
-                    <Text
-                      style={{
-                        color: isDark ? "#888" : "#999",
-                        fontSize: 12,
-                        marginTop: 4,
-                      }}
-                    >
-                      {coords.latitude.toFixed(4)},{" "}
-                      {coords.longitude.toFixed(4)}
+                    <Text style={styles.mapCaption}>
+                      {formatCoordinates(coords)}
+                      {incident.locationSource === "adjusted"
+                        ? " · pin placed by the reporter"
+                        : incident.locationAccuracy
+                          ? ` · accurate to about ${formatDistance(incident.locationAccuracy)}`
+                          : ""}
                     </Text>
-                    <Text
-                      style={{
-                        color: "#007AFF",
-                        fontSize: 12,
-                        fontWeight: "600",
-                        marginTop: 4,
-                      }}
-                    >
-                      Open in Maps
-                    </Text>
-                  </TouchableOpacity>
+                  </>
                 )}
               </View>
             </View>

@@ -18,6 +18,8 @@ import {
     View,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
+import { LocationMap } from "../components/LocationMap";
+import { PinPicker } from "../components/PinPicker";
 import { isEmailJsConfigured, sendAgencyEmail } from "../config/agencyEmail";
 import { HAS_BACKEND, postToBackend } from "../config/api";
 import { db } from "../config/firebase";
@@ -29,11 +31,26 @@ import { subscribeToActiveAgencies } from "../services/firestoreService";
 import { showAlert } from "../utils/crossPlatformAlert";
 import { copyVideoToCache, resolveLocalFile } from "../utils/localVideoFile";
 import {
+  APPROXIMATE_ACCURACY_M,
+  type Coordinates,
+  formatCoordinates,
+  formatDistance,
+  getPreciseLocation,
+  lookupAddress,
+} from "../utils/location";
+import {
   deleteIncidentVideo,
   MAX_VIDEO_BYTES,
   saveIncidentVideo,
   videoTooLargeMessage,
 } from "../utils/videoStore";
+
+// Computers have no GPS: their browsers guess the position from the internet
+// connection, which can be kilometers off.
+const IS_COMPUTER_BROWSER =
+  Platform.OS === "web" &&
+  typeof navigator !== "undefined" &&
+  !/Android|iPhone|iPad|iPod|Mobile/i.test(navigator.userAgent ?? "");
 
 // Each option row is ~48px (14px padding top/bottom + text + divider). Capping
 // the list at 4.5 rows makes it scroll as soon as there are more than four
@@ -239,9 +256,19 @@ export default function CaptureIncidentScreen() {
     latitude: number;
     longitude: number;
   } | null>(null);
+  // Meters the fix may be off by, when the device says.
+  const [locationAccuracy, setLocationAccuracy] = useState<number | null>(
+    null,
+  );
   const [submittingAgency, setSubmittingAgency] = useState<Agency | null>(null);
   const [uploadProgress, setUploadProgress] = useState(0);
   const [isLocating, setIsLocating] = useState(false);
+  // What the location button says while a search is running.
+  const [locatingStatus, setLocatingStatus] = useState("Locating...");
+  // "device": found by Search My Location; "adjusted": the reporter moved the
+  // pin by hand (a computer's guessed position can be kilometers off).
+  const [locationSource, setLocationSource] = useState<"device" | "adjusted" | null>(null);
+  const [pickerOpen, setPickerOpen] = useState(false);
   const [activeAgencies, setActiveAgencies] = useState<Agency[]>([]);
   const [selectedAgency, setSelectedAgency] = useState<Agency | "">("");
   const [category, setCategory] = useState("");
@@ -554,6 +581,35 @@ export default function CaptureIncidentScreen() {
       color: isDark ? "#fff" : "#000",
       lineHeight: 18,
     },
+    locationMap: {
+      marginTop: 8,
+    },
+    accuracyText: {
+      marginTop: 6,
+      fontSize: 12,
+      lineHeight: 16,
+      color: isDark ? "#aaa" : "#6c757d",
+    },
+    accuracyWarning: {
+      color: "#FF9500",
+      fontWeight: "600",
+    },
+    adjustButton: {
+      flexDirection: "row",
+      alignItems: "center",
+      alignSelf: "flex-start",
+      gap: 6,
+      marginTop: 8,
+      paddingVertical: 8,
+      paddingHorizontal: 12,
+      borderRadius: 8,
+      backgroundColor: isDark ? "#2a2a4e" : "#e8f0fe",
+    },
+    adjustButtonText: {
+      color: "#007AFF",
+      fontSize: 13,
+      fontWeight: "600",
+    },
   });
 
   const uploadVideo = async () => {
@@ -603,26 +659,9 @@ export default function CaptureIncidentScreen() {
     }
   };
 
-  // getCurrentPositionAsync has no built-in timeout, so on a device/emulator
-  // that never produces a GPS fix (common on emulators without a mocked
-  // location) it can hang indefinitely instead of failing. Race it against a
-  // timer so the fallback to the last-known position kicks in promptly.
-  const withTimeout = <T,>(
-    promise: Promise<T>,
-    ms: number,
-    timeoutMessage: string,
-  ): Promise<T> => {
-    let timeoutId: ReturnType<typeof setTimeout> | undefined;
-    return Promise.race([
-      promise,
-      new Promise<T>((_, reject) => {
-        timeoutId = setTimeout(() => reject(new Error(timeoutMessage)), ms);
-      }),
-    ]).finally(() => clearTimeout(timeoutId));
-  };
-
   const searchMyLocation = async () => {
     setIsLocating(true);
+    setLocatingStatus("Locating...");
     try {
       const { status } = await Location.requestForegroundPermissionsAsync();
       if (status !== "granted") {
@@ -671,72 +710,25 @@ export default function CaptureIncidentScreen() {
         return;
       }
 
-      // 1. A very recent, precise cached fix is as good as a new one for an
-      //    incident report - and it's instant, even indoors.
-      let position = await Location.getLastKnownPositionAsync({
-        maxAge: 2 * 60 * 1000,
-        requiredAccuracy: 100,
-      });
-
-      // 2. Otherwise ask for a fresh fix. Balanced uses Wi-Fi/cell towers as
-      //    well as GPS, so it resolves far sooner than waiting on satellites.
-      if (!position) {
-        try {
-          position = await withTimeout(
-            Location.getCurrentPositionAsync({
-              accuracy: Location.Accuracy.Balanced,
-              mayShowUserSettingsDialog: true,
-            }),
-            15000,
-            "Timed out waiting for a GPS fix",
-          );
-        } catch (currentLocationError) {
-          // 3. Indoors or on a cold GPS start this is expected - fall back to
-          //    an older/rougher cached fix rather than failing outright.
-          console.log(
-            "No fresh location fix yet, using last known location instead",
-          );
-          position = await Location.getLastKnownPositionAsync({
-            maxAge: 30 * 60 * 1000,
-            requiredAccuracy: 2000,
-          });
-
-          if (!position) {
-            throw currentLocationError;
-          }
+      // A fresh fix, refined for a few seconds - see getPreciseLocation. The
+      // old quick answers (a cached fix, or "balanced" accuracy that skips
+      // GPS) put reports hundreds of meters to kilometers from the reporter.
+      const fix = await getPreciseLocation(({ accuracy }) => {
+        if (accuracy != null) {
+          setLocatingStatus(`Improving accuracy (±${formatDistance(accuracy)})...`);
         }
-      }
+      });
+      const coords = { latitude: fix.latitude, longitude: fix.longitude };
 
-      const { latitude, longitude } = position.coords;
-      setCoordinates({ latitude, longitude });
+      setLocatingStatus("Finding the address...");
+      const address = await lookupAddress(coords);
 
-      const fallbackLocationText = `${latitude.toFixed(6)}, ${longitude.toFixed(6)}`;
-      let locationText = fallbackLocationText;
-
-      try {
-        const [address] = await Location.reverseGeocodeAsync({
-          latitude,
-          longitude,
-        });
-        const parts = [
-          address?.name,
-          address?.street,
-          address?.district,
-          address?.city,
-          address?.region,
-          address?.country,
-        ].filter(Boolean);
-
-        locationText =
-          parts.length > 0 ? parts.join(", ") : fallbackLocationText;
-      } catch (reverseGeocodeError) {
-        console.warn(
-          "Could not convert coordinates to an address:",
-          reverseGeocodeError,
-        );
-      }
-
-      setLocation(locationText);
+      // All together, so the text, map and accuracy always describe the
+      // same fix.
+      setCoordinates(coords);
+      setLocationAccuracy(fix.accuracy);
+      setLocationSource("device");
+      setLocation(address ?? formatCoordinates(coords));
     } catch (error) {
       console.warn("Error getting location:", error);
       showAlert(
@@ -748,8 +740,25 @@ export default function CaptureIncidentScreen() {
     }
   };
 
-  // Location is filled in only by "Search My Location", and its text is set
-  // last (after the coordinates), so this also waits for that to finish.
+  // The reporter moved the pin by hand: that spot replaces the device's.
+  const applyPickedSpot = async (coords: Coordinates) => {
+    setPickerOpen(false);
+    setIsLocating(true);
+    setLocatingStatus("Finding the address...");
+    try {
+      const address = await lookupAddress(coords);
+      setCoordinates(coords);
+      setLocationAccuracy(null);
+      setLocationSource("adjusted");
+      setLocation(address ?? formatCoordinates(coords));
+    } finally {
+      setIsLocating(false);
+    }
+  };
+
+  // Location is filled in only by "Search My Location" (or by moving its
+  // pin), which sets the text and coordinates together once the address
+  // lookup is done.
   const hasLocation = Boolean(coordinates && location.trim());
   const canSubmit = Boolean(
     video &&
@@ -870,6 +879,10 @@ export default function CaptureIncidentScreen() {
         injuryLevel,
         location: location.trim(),
         coordinates,
+        // Lets the admin's map show how sure the pin is.
+        locationAccuracy:
+          locationAccuracy != null ? Math.round(locationAccuracy) : null,
+        locationSource,
         status: "pending",
         createdAt: serverTimestamp(),
         updatedAt: serverTimestamp(),
@@ -1031,13 +1044,67 @@ export default function CaptureIncidentScreen() {
           >
             <Ionicons name="locate" size={18} color="#fff" />
             <Text style={styles.locationButtonText}>
-              {isLocating ? "Locating..." : "Search My Location"}
+              {isLocating ? locatingStatus : "Search My Location"}
             </Text>
           </TouchableOpacity>
           {location ? (
             <View style={styles.locationResult}>
               <Text style={styles.locationResultText}>{location}</Text>
+              {coordinates ? (
+                <LocationMap
+                  coords={coordinates}
+                  accuracy={locationAccuracy}
+                  label={location}
+                  height={170}
+                  isDark={isDark}
+                  style={styles.locationMap}
+                  actionLabel="Adjust pin"
+                  onPress={() => setPickerOpen(true)}
+                />
+              ) : null}
+              {locationSource === "adjusted" ? (
+                <Text style={styles.accuracyText}>Pin placed by you on the map.</Text>
+              ) : locationAccuracy != null ? (
+                locationAccuracy > APPROXIMATE_ACCURACY_M ? (
+                  <Text style={[styles.accuracyText, styles.accuracyWarning]}>
+                    {`Approximate location (within about ${formatDistance(locationAccuracy)}). Turn on GPS or step outside and search again, or adjust the pin to the exact spot.`}
+                  </Text>
+                ) : (
+                  <Text style={styles.accuracyText}>
+                    {`Accurate to about ${formatDistance(locationAccuracy)}.`}
+                  </Text>
+                )
+              ) : null}
+              {locationSource === "device" && IS_COMPUTER_BROWSER ? (
+                <Text style={styles.accuracyText}>
+                  Computers have no GPS. They guess their location from the
+                  internet connection, so it can be off. Check the pin.
+                </Text>
+              ) : null}
+              <TouchableOpacity
+                style={styles.adjustButton}
+                onPress={() => setPickerOpen(true)}
+                disabled={isLocating}
+              >
+                <Ionicons name="move" size={16} color="#007AFF" />
+                <Text style={styles.adjustButtonText}>Wrong spot? Adjust the pin</Text>
+              </TouchableOpacity>
             </View>
+          ) : null}
+          {pickerOpen && coordinates ? (
+            <PinPicker
+              start={coordinates}
+              startZoom={
+                locationAccuracy != null && locationAccuracy > 1000
+                  ? 14
+                  : locationAccuracy != null && locationAccuracy > 200
+                    ? 15
+                    : 17
+              }
+              isDark={isDark}
+              onCancel={() => setPickerOpen(false)}
+              onPick={applyPickedSpot}
+            />
           ) : null}
         </View>
 

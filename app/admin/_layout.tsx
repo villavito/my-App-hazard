@@ -101,6 +101,7 @@ export default function AdminLayout() {
       route: "/admin/incidents",
       badge: pendingCount > 0 ? String(pendingCount) : undefined,
     },
+    { icon: "map-outline", label: "Incident Map", route: "/admin/map" },
     { icon: "person-outline", label: "Profile", route: "/profile" },
   ];
 
