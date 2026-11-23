@@ -1,13 +1,16 @@
 import { Ionicons } from "@expo/vector-icons";
 import { Tabs } from "expo-router";
 import { useEffect, useState } from "react";
-import { useColorScheme, View } from "react-native";
+import { View } from "react-native";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useAuth } from "../../contexts/AuthContext";
 import { hasUnreadNotifications } from "../../services/firestoreService";
+import { useColorScheme } from "../../utils/useColorScheme";
 
 export default function TabLayout() {
   const colorScheme = useColorScheme();
   const isDark = colorScheme === "dark";
+  const insets = useSafeAreaInsets();
   const { user } = useAuth();
   const [hasUnread, setHasUnread] = useState(false);
 
@@ -39,10 +42,13 @@ export default function TabLayout() {
           backgroundColor: isDark ? "#1a1a1a" : "#fff",
           borderTopColor: isDark ? "#2a2a2a" : "#e0e0e0",
           borderTopWidth: 1,
-          paddingBottom: 8,
-          paddingTop: 8,
-          height: 60,
-          marginBottom: 40,
+          // 60 leaves room for each icon and its label (extra top/bottom
+          // padding here used to cut the labels off). insets.bottom is the
+          // phone's own button bar / home line, which the bar now pads for
+          // itself - a fixed 40px gap used to stand in for it, leaving an
+          // empty strip under the bar in browsers. It is 0 in a browser.
+          height: 60 + insets.bottom,
+          paddingBottom: insets.bottom,
         },
         tabBarLabelStyle: {
           fontSize: 11,

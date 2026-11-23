@@ -8,7 +8,6 @@ import {
   StyleSheet,
   Text,
   TouchableOpacity,
-  useColorScheme,
   View,
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
@@ -17,6 +16,8 @@ import { AGENCIES, AGENCY_COLORS } from "../../constants/agencies";
 import { useAuth } from "../../contexts/AuthContext";
 import { signOutUser } from "../../services/authService";
 import { countPendingIncidents } from "../../services/firestoreService";
+// Not react-native's: that one left this header white on dark-mode phones.
+import { useColorScheme } from "../../utils/useColorScheme";
 
 const { width: SCREEN_WIDTH } = Dimensions.get("window");
 const SIDEBAR_WIDTH = SCREEN_WIDTH * 0.75;
