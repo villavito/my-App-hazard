@@ -312,6 +312,43 @@ export const subscribeToAgencyIncidents = (
   return () => unsubscribes.forEach((unsubscribe) => unsubscribe());
 };
 
+export type ReporterProfile = {
+  name: string | null;
+  email: string | null;
+  phoneNumber: string | null;
+};
+
+const reporterProfiles = new Map<string, Promise<ReporterProfile | null>>();
+
+// The name and contact details of the person who sent a report, from their
+// user profile (the rules let admins read any profile). Remembered for the
+// session, so it costs one read per reporter.
+export const getReporterProfile = (uid: string): Promise<ReporterProfile | null> => {
+  let pending = reporterProfiles.get(uid);
+  if (!pending) {
+    const text = (value: unknown) =>
+      typeof value === "string" && value.trim() ? value.trim() : null;
+    pending = getDoc(doc(db, "users", uid))
+      .then((snapshot) => {
+        if (!snapshot.exists()) return null;
+        const data = snapshot.data();
+        return {
+          name: text(data.displayName),
+          email: text(data.email),
+          phoneNumber: text(data.phoneNumber),
+        };
+      })
+      .catch((error) => {
+        console.warn("Could not load the reporter's profile:", error);
+        // Let a later look try again.
+        reporterProfiles.delete(uid);
+        return null;
+      });
+    reporterProfiles.set(uid, pending);
+  }
+  return pending;
+};
+
 export const setAgencyActive = async (agency: Agency) => {
   // The `agency: Agency` type only holds at compile time - this value
   // actually comes from a Firestore user doc (an untyped cast), so a bad

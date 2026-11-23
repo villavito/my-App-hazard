@@ -3,6 +3,7 @@ import { useLocalSearchParams, useRouter } from "expo-router";
 import React, { useEffect, useState } from "react";
 import {
   ActivityIndicator,
+  Linking,
   Platform,
   ScrollView,
   StyleSheet,
@@ -19,6 +20,8 @@ import { useAuth } from "../../contexts/AuthContext";
 import {
   addIncidentComment,
   getIncidentById,
+  getReporterProfile,
+  type ReporterProfile,
   updateIncidentStatus,
 } from "../../services/firestoreService";
 import { showAlert } from "../../utils/crossPlatformAlert";
@@ -47,6 +50,7 @@ function isPlayableVideoUrl(uri: string): boolean {
 
 type Incident = {
   id: string;
+  userId?: string;
   userEmail?: string;
   situation?: string;
   description?: string;
@@ -125,6 +129,25 @@ export default function IncidentDetailScreen() {
   }, [needsAddress, latitude, longitude]);
   const addressForPoint =
     foundAddress?.key === pointKey ? foundAddress.address : null;
+
+  // The reporter's name and phone come from their profile.
+  const reporterId = incident?.userId;
+  const [reporter, setReporter] = useState<{
+    uid: string;
+    profile: ReporterProfile | null;
+  } | null>(null);
+  useEffect(() => {
+    if (!reporterId) return;
+    let cancelled = false;
+    getReporterProfile(reporterId).then((profile) => {
+      if (!cancelled) setReporter({ uid: reporterId, profile });
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [reporterId]);
+  const reporterProfile =
+    reporter && reporter.uid === reporterId ? reporter.profile : null;
 
   const handleStatusUpdate = (newStatus: string) => {
     if (!incident) return;
@@ -340,6 +363,15 @@ export default function IncidentDetailScreen() {
       fontWeight: "600",
       color: isDark ? "#fff" : "#333",
       marginTop: 1,
+    },
+    infoSub: {
+      fontSize: 13,
+      color: isDark ? "#aaa" : "#666",
+      marginTop: 1,
+    },
+    phoneLink: {
+      color: "#007AFF",
+      fontWeight: "600",
     },
     // Injury Badge
     injuryBadge: {
@@ -657,11 +689,25 @@ export default function IncidentDetailScreen() {
                 color="#007AFF"
                 style={styles.infoIcon}
               />
-              <View>
+              <View style={{ flex: 1 }}>
                 <Text style={styles.infoLabel}>Reported by</Text>
                 <Text style={styles.infoValue}>
-                  {incident.userEmail || "Anonymous"}
+                  {reporterProfile?.name || incident.userEmail || "Anonymous"}
                 </Text>
+                {reporterProfile?.name && incident.userEmail ? (
+                  <Text style={styles.infoSub}>{incident.userEmail}</Text>
+                ) : null}
+                {reporterProfile?.phoneNumber ? (
+                  <Text
+                    style={[styles.infoSub, styles.phoneLink]}
+                    onPress={() =>
+                      Linking.openURL(`tel:${reporterProfile.phoneNumber}`).catch(() => {})
+                    }
+                    accessibilityRole="link"
+                  >
+                    {reporterProfile.phoneNumber}
+                  </Text>
+                ) : null}
               </View>
             </View>
 

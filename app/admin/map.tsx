@@ -1,8 +1,9 @@
 import { Ionicons } from "@expo/vector-icons";
 import { useLocalSearchParams, useRouter } from "expo-router";
-import { useEffect, useMemo, useRef, useState } from "react";
+import { type ReactNode, useEffect, useMemo, useRef, useState } from "react";
 import {
   ActivityIndicator,
+  Linking,
   StyleSheet,
   Text,
   TouchableOpacity,
@@ -21,7 +22,11 @@ import {
   type IncidentStatusKey,
 } from "../../constants/incidentStatus";
 import { useAuth } from "../../contexts/AuthContext";
-import { subscribeToAgencyIncidents } from "../../services/firestoreService";
+import {
+  getReporterProfile,
+  type ReporterProfile,
+  subscribeToAgencyIncidents,
+} from "../../services/firestoreService";
 import { showAlert } from "../../utils/crossPlatformAlert";
 import {
   type Coordinates,
@@ -48,6 +53,8 @@ type MapIncident = {
   locationAccuracy?: number | null;
   /** "adjusted" when the reporter moved the pin by hand. */
   locationSource?: string | null;
+  userId?: string;
+  userEmail?: string;
   createdAt?: { toDate: () => Date };
 };
 
@@ -63,7 +70,33 @@ const FILTERS: { key: Filter; label: string; color?: string }[] = [
 const FOCUS_ZOOM = 17;
 // Room the details card takes at the bottom of the map, so a tapped pin
 // can slide up out from under it.
-const CARD_SPACE = 240;
+const CARD_SPACE = 340;
+
+/** "Monday, November 24, 2026". */
+function formatDay(date: Date) {
+  return date.toLocaleDateString(undefined, {
+    weekday: "long",
+    month: "long",
+    day: "numeric",
+    year: "numeric",
+  });
+}
+
+/** "3:15 PM". */
+function formatTime(date: Date) {
+  return date.toLocaleTimeString(undefined, { hour: "numeric", minute: "2-digit" });
+}
+
+/** "just now", "5 min ago", "3 hours ago", "2 days ago". */
+function timeAgo(date: Date, now: number) {
+  const minutes = Math.floor((now - date.getTime()) / 60000);
+  if (minutes < 1) return "just now";
+  if (minutes < 60) return `${minutes} min ago`;
+  const hours = Math.floor(minutes / 60);
+  if (hours < 24) return `${hours} hour${hours === 1 ? "" : "s"} ago`;
+  const days = Math.floor(hours / 24);
+  return `${days} day${days === 1 ? "" : "s"} ago`;
+}
 
 function statusOf(incident: MapIncident) {
   return (
@@ -206,6 +239,53 @@ export default function IncidentMapScreen() {
       current.incident.location ||
       formatCoordinates(current.coords)
     : "";
+
+  // Who sent the chosen report: name and contact details come from their
+  // profile, looked up when the card opens.
+  const reporterId = current?.incident.userId;
+  const [reporter, setReporter] = useState<{
+    uid: string;
+    profile: ReporterProfile | null;
+  } | null>(null);
+  useEffect(() => {
+    if (!reporterId) return;
+    let cancelled = false;
+    getReporterProfile(reporterId).then((profile) => {
+      if (!cancelled) setReporter({ uid: reporterId, profile });
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [reporterId]);
+  // undefined while it is still being looked up.
+  const reporterProfile =
+    reporter && reporter.uid === reporterId ? reporter.profile : undefined;
+  const reporterEmail = current?.incident.userEmail || reporterProfile?.email || null;
+  const reporterName =
+    reporterProfile?.name ??
+    (reporterProfile === undefined && reporterId ? "Loading..." : null);
+  const reporterPhone = reporterProfile?.phoneNumber ?? null;
+
+  const created = current?.incident.createdAt?.toDate?.();
+  const locationNote =
+    current?.incident.locationSource === "adjusted"
+      ? " (pin placed by the reporter)"
+      : current?.incident.locationAccuracy
+        ? ` (±${formatDistance(current.incident.locationAccuracy)})`
+        : "";
+
+  // The clock for "5 min ago", ticking twice a minute. (Never read during
+  // the first render, so the pre-built web page still matches.)
+  const [now, setNow] = useState<number | null>(null);
+  useEffect(() => {
+    const tick = () => setNow(Date.now());
+    const first = setTimeout(tick, 0);
+    const timer = setInterval(tick, 30000);
+    return () => {
+      clearTimeout(first);
+      clearInterval(timer);
+    };
+  }, []);
 
   const notice =
     incidents === null
@@ -381,17 +461,41 @@ export default function IncidentMapScreen() {
     closeButton: {
       padding: 4,
     },
-    cardLine: {
+    details: {
+      marginTop: 10,
+      gap: 7,
+    },
+    detailRow: {
       flexDirection: "row",
       alignItems: "flex-start",
-      gap: 6,
-      marginTop: 8,
     },
-    cardText: {
-      flex: 1,
-      fontSize: 13,
-      color: isDark ? "#ccc" : "#444",
+    detailIcon: {
+      width: 22,
+      marginTop: 1,
+    },
+    detailLabel: {
+      width: 86,
+      fontSize: 12,
       lineHeight: 18,
+      color: isDark ? "#888" : "#777",
+    },
+    detailValueBox: {
+      flex: 1,
+    },
+    detailValue: {
+      fontSize: 13,
+      lineHeight: 18,
+      fontWeight: "600",
+      color: isDark ? "#fff" : "#1a1a2e",
+    },
+    detailSub: {
+      fontSize: 12,
+      lineHeight: 17,
+      color: isDark ? "#aaa" : "#555",
+    },
+    phoneLink: {
+      color: "#007AFF",
+      fontWeight: "600",
     },
     pager: {
       flexDirection: "row",
@@ -447,6 +551,23 @@ export default function IncidentMapScreen() {
       ? "Loading reports..."
       : `${located.length} report${located.length === 1 ? "" : "s"} on the map` +
         (withoutLocation > 0 ? ` · ${withoutLocation} without a location` : "");
+
+  // One labelled line of the details card.
+  const detailRow = (
+    icon: keyof typeof Ionicons.glyphMap,
+    label: string,
+    value: string,
+    extra?: ReactNode,
+  ) => (
+    <View style={styles.detailRow}>
+      <Ionicons name={icon} size={15} color="#007AFF" style={styles.detailIcon} />
+      <Text style={styles.detailLabel}>{label}</Text>
+      <View style={styles.detailValueBox}>
+        <Text style={styles.detailValue}>{value}</Text>
+        {extra}
+      </View>
+    </View>
+  );
 
   return (
     <View style={styles.container}>
@@ -556,23 +677,43 @@ export default function IncidentMapScreen() {
               </TouchableOpacity>
             </View>
 
-            <View style={styles.cardLine}>
-              <Ionicons name="location-outline" size={15} color="#34C759" />
-              <Text style={styles.cardText}>
-                {address}
-                {current.incident.locationSource === "adjusted"
-                  ? " (pin placed by the reporter)"
-                  : current.incident.locationAccuracy
-                    ? ` (±${formatDistance(current.incident.locationAccuracy)})`
-                    : ""}
-              </Text>
-            </View>
-            <View style={styles.cardLine}>
-              <Ionicons name="time-outline" size={15} color="#FF9500" />
-              <Text style={styles.cardText}>
-                {current.incident.createdAt?.toDate?.()?.toLocaleString() ?? "Unknown date"}
-                {current.incident.injuryLevel ? ` · Injury: ${current.incident.injuryLevel}` : ""}
-              </Text>
+            <View style={styles.details}>
+              {detailRow(
+                "person-outline",
+                "Reported by",
+                reporterName ?? reporterEmail ?? "Unknown",
+                (reporterName && reporterEmail) || reporterPhone ? (
+                  <Text style={styles.detailSub}>
+                    {reporterName ? reporterEmail : null}
+                    {reporterPhone ? (
+                      <Text
+                        style={styles.phoneLink}
+                        onPress={() =>
+                          Linking.openURL(`tel:${reporterPhone}`).catch(() => {})
+                        }
+                        accessibilityRole="link"
+                      >
+                        {`${reporterName && reporterEmail ? " · " : ""}${reporterPhone}`}
+                      </Text>
+                    ) : null}
+                  </Text>
+                ) : null,
+              )}
+              {detailRow("calendar-outline", "Date", created ? formatDay(created) : "Unknown")}
+              {detailRow(
+                "time-outline",
+                "Time",
+                created
+                  ? `${formatTime(created)}${now !== null ? ` · ${timeAgo(created, now)}` : ""}`
+                  : "Unknown",
+              )}
+              {current.incident.injuryLevel
+                ? detailRow("medkit-outline", "Injury", current.incident.injuryLevel)
+                : null}
+              {current.incident.description
+                ? detailRow("document-text-outline", "Details", current.incident.description)
+                : null}
+              {detailRow("location-outline", "Location", `${address}${locationNote}`)}
             </View>
 
             {selectedIds.length > 1 ? (
